@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 
 import '../core/time_zone.dart';
+import 'caldav/caldav_event_writer.dart';
 import '../domain/models.dart';
 import '../domain/recurrence.dart';
 import 'calendar_repository.dart';
@@ -25,11 +26,12 @@ class EventService {
     required this.repository,
     required this.google,
     required this.sync,
-  });
+  }) : _caldav = CalDavEventWriter(repository: repository, sync: sync);
 
   final CalendarRepository repository;
   final GoogleCalendarGateway google;
   final SyncService sync;
+  final CalDavEventWriter _caldav;
 
   String newEventId() => 'local-event:${_uuid.v4()}';
 
@@ -61,6 +63,8 @@ class EventService {
           final mapped = GoogleMapper.fromGoogle(created, cal.id);
           if (mapped != null) await repository.upsertEvent(mapped);
         }
+      case SourceType.caldav:
+        await _caldav.create(e, cal, source);
       case SourceType.ical:
         throw ReadOnlyCalendarException();
     }
@@ -98,6 +102,8 @@ class EventService {
         await google.patchEvent(oldCal.remoteId!, master.remoteId!,
             GoogleMapper.toGoogle(edited, includeRecurrence: !master.isPartOfSeries));
         await sync.syncGoogleCalendar(oldCal, interactive: true);
+      case SourceType.caldav:
+        await _caldav.update(original, edited, scope, oldCal, oldSource);
       case SourceType.ical:
         throw ReadOnlyCalendarException();
     }
@@ -170,6 +176,8 @@ class EventService {
         } else {
           await sync.syncGoogleCalendar(cal, interactive: true);
         }
+      case SourceType.caldav:
+        await _caldav.delete(occurrence, scope, cal, source);
       case SourceType.ical:
         throw ReadOnlyCalendarException();
     }

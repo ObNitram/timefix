@@ -793,6 +793,102 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Reconnexion à Google nécessaire'**
   String get googleReconnect;
+
+  /// No description provided for @sourceCalDav.
+  ///
+  /// In fr, this message translates to:
+  /// **'Compte CalDAV'**
+  String get sourceCalDav;
+
+  /// No description provided for @sourceCalDavSubtitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Serveur TimeFix auto-hébergé, Nextcloud, Radicale, iCloud…'**
+  String get sourceCalDavSubtitle;
+
+  /// No description provided for @sourceTypeCalDav.
+  ///
+  /// In fr, this message translates to:
+  /// **'CalDAV'**
+  String get sourceTypeCalDav;
+
+  /// No description provided for @serverUrl.
+  ///
+  /// In fr, this message translates to:
+  /// **'Adresse du serveur'**
+  String get serverUrl;
+
+  /// No description provided for @serverUrlHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'https://cal.exemple.fr'**
+  String get serverUrlHint;
+
+  /// No description provided for @username.
+  ///
+  /// In fr, this message translates to:
+  /// **'Identifiant'**
+  String get username;
+
+  /// No description provided for @password.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mot de passe'**
+  String get password;
+
+  /// No description provided for @connect.
+  ///
+  /// In fr, this message translates to:
+  /// **'Se connecter'**
+  String get connect;
+
+  /// No description provided for @caldavError.
+  ///
+  /// In fr, this message translates to:
+  /// **'Connexion CalDAV impossible : {message}'**
+  String caldavError(String message);
+
+  /// No description provided for @caldavAuthError.
+  ///
+  /// In fr, this message translates to:
+  /// **'Identifiant ou mot de passe incorrect'**
+  String get caldavAuthError;
+
+  /// No description provided for @newCalendar.
+  ///
+  /// In fr, this message translates to:
+  /// **'Nouveau calendrier'**
+  String get newCalendar;
+
+  /// No description provided for @changePassword.
+  ///
+  /// In fr, this message translates to:
+  /// **'Modifier le mot de passe'**
+  String get changePassword;
+
+  /// No description provided for @passwordUpdated.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mot de passe mis à jour'**
+  String get passwordUpdated;
+
+  /// No description provided for @conflictError.
+  ///
+  /// In fr, this message translates to:
+  /// **'Cet événement a été modifié ailleurs. Les données ont été actualisées : réessayez.'**
+  String get conflictError;
+
+  /// No description provided for @caldavHelp.
+  ///
+  /// In fr, this message translates to:
+  /// **'Pour un serveur TimeFix, utilisez l\'adresse du serveur (ex. https://cal.exemple.fr) et le compte créé par l\'administrateur.'**
+  String get caldavHelp;
+
+  /// No description provided for @account.
+  ///
+  /// In fr, this message translates to:
+  /// **'Compte'**
+  String get account;
 }
 
 class _AppLocalizationsDelegate

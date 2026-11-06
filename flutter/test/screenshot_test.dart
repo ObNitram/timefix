@@ -95,4 +95,17 @@ void main() {
       await t.pumpAndSettle();
     });
   }, skip: !_enabled);
+  testWidgets('caldav_account', (t) async {
+    await shoot(t, 'caldav_account', before: () async {
+      await t.tap(find.byTooltip('Ouvrir le menu'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Ajouter un calendrier'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Compte CalDAV'));
+      await t.pumpAndSettle();
+      await t.enterText(find.byType(TextFormField).at(0), 'https://cal.exemple.fr');
+      await t.enterText(find.byType(TextFormField).at(1), 'marie');
+      await t.pumpAndSettle();
+    });
+  }, skip: !_enabled);
 }

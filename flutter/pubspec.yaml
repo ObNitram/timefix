@@ -50,6 +50,8 @@ dependencies:
   googleapis_auth: ^2.3.5
   flutter_localizations:
     sdk: flutter
+  xml: ^7.1.0
+  flutter_secure_storage: ^11.2.0
 
 dev_dependencies:
   flutter_test:

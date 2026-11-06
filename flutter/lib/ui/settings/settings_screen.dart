@@ -99,6 +99,7 @@ class SettingsScreen extends ConsumerWidget {
                 SourceType.local => Icons.phone_android,
                 SourceType.ical => Icons.link,
                 SourceType.google => Icons.account_circle_outlined,
+                SourceType.caldav => Icons.dns_outlined,
               }),
               title: Text(s.type == SourceType.local ? l10n.sourceTypeLocal : s.name),
               subtitle: Text(

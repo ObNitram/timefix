@@ -262,5 +262,28 @@
   "colorGrape": "Raisin",
   "colorGraphite": "Graphite",
   "repeat": "Répétition",
-  "googleReconnect": "Reconnexion à Google nécessaire"
+  "googleReconnect": "Reconnexion à Google nécessaire",
+  "sourceCalDav": "Compte CalDAV",
+  "sourceCalDavSubtitle": "Serveur TimeFix auto-hébergé, Nextcloud, Radicale, iCloud…",
+  "sourceTypeCalDav": "CalDAV",
+  "serverUrl": "Adresse du serveur",
+  "serverUrlHint": "https://cal.exemple.fr",
+  "username": "Identifiant",
+  "password": "Mot de passe",
+  "connect": "Se connecter",
+  "caldavError": "Connexion CalDAV impossible : {message}",
+  "@caldavError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "caldavAuthError": "Identifiant ou mot de passe incorrect",
+  "newCalendar": "Nouveau calendrier",
+  "changePassword": "Modifier le mot de passe",
+  "passwordUpdated": "Mot de passe mis à jour",
+  "conflictError": "Cet événement a été modifié ailleurs. Les données ont été actualisées : réessayez.",
+  "caldavHelp": "Pour un serveur TimeFix, utilisez l'adresse du serveur (ex. https://cal.exemple.fr) et le compte créé par l'administrateur.",
+  "account": "Compte"
 }

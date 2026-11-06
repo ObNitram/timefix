@@ -198,7 +198,7 @@ class IcsParser {
       cancelled: status == 'CANCELLED',
       lastModified:
           lastModProp == null ? null : parseDateValue(lastModProp, null)?.value,
-      color: get('COLOR')?.value,
+      color: get('X-TIMEFIX-COLOR')?.value ?? get('COLOR')?.value,
     );
   }
 

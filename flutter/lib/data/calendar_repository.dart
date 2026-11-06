@@ -29,6 +29,9 @@ abstract class CalendarRepository {
   /// Replaces every event of [calendarId] (used by synchronisation).
   Future<void> replaceEvents(String calendarId, List<CalendarEvent> events);
 
+  /// Events stored in the CalDAV resource [href] (a series and its overrides).
+  Future<List<CalendarEvent>> eventsByHref(String calendarId, String href);
+
   /// Events whose title, location or description contains [query].
   Future<List<CalendarEvent>> searchEvents(String query, Set<String> calendarIds,
       {int limit = 200});
@@ -110,6 +113,10 @@ class InMemoryCalendarRepository implements CalendarRepository {
       _events[e.id] = e;
     }
   }
+
+  @override
+  Future<List<CalendarEvent>> eventsByHref(String calendarId, String href) async =>
+      _events.values.where((e) => e.calendarId == calendarId && e.href == href).toList();
 
   @override
   Future<List<CalendarEvent>> searchEvents(String query, Set<String> calendarIds,

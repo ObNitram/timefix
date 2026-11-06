@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/colors.dart';
 import '../../domain/models.dart';
 import '../../state/providers.dart';
 import '../format.dart';
@@ -52,6 +53,7 @@ class SourceScreen extends ConsumerWidget {
             ListTile(
               leading: const Icon(Icons.link),
               title: SelectableText(source.url!),
+              subtitle: source.username == null ? null : Text('${l10n.account} : ${source.username}'),
             ),
           if (source.lastError != null)
             ListTile(
@@ -99,7 +101,7 @@ class SourceScreen extends ConsumerWidget {
                   }
                 },
                 itemBuilder: (context) => [
-                  if (source.type != SourceType.google)
+                  if (source.type == SourceType.local || source.type == SourceType.ical)
                     PopupMenuItem(value: 'rename', child: Text(l10n.rename)),
                   PopupMenuItem(value: 'color', child: Text(l10n.color)),
                   if (isLocal && calendars.length > 1)
@@ -107,6 +109,36 @@ class SourceScreen extends ConsumerWidget {
                 ],
               ),
             ),
+          if (source.type == SourceType.caldav) ...[
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.add),
+              title: Text(l10n.newCalendar),
+              onTap: () async {
+                final result = await _askNewCalendar(context);
+                if (result == null || !context.mounted) return;
+                await runGuarded(context, () async {
+                  await ref
+                      .read(syncServiceProvider)
+                      .createCalDavCalendar(source, result.name, result.color);
+                  await bump();
+                });
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.key_outlined),
+              title: Text(l10n.changePassword),
+              onTap: () async {
+                final password = await _askPassword(context);
+                if (password == null || password.isEmpty || !context.mounted) return;
+                final ok = await runGuarded(context, () async {
+                  await ref.read(syncServiceProvider).updateCalDavPassword(source, password);
+                  await bump();
+                });
+                if (ok && context.mounted) showSnack(context, l10n.passwordUpdated);
+              },
+            ),
+          ],
           if (!isLocal) ...[
             const Divider(),
             ListTile(
@@ -128,6 +160,66 @@ class SourceScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  static Future<({String name, Color color})?> _askNewCalendar(BuildContext context) {
+    final controller = TextEditingController();
+    var color = calendarPalette[4].color;
+    return showDialog<({String name, Color color})>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(context.l10n.newCalendar),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(labelText: context.l10n.name),
+                ),
+                const SizedBox(height: 16),
+                ColorSwatchRow(selected: color, onSelected: (c) => setState(() => color = c)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(context.l10n.cancel)),
+            TextButton(
+              onPressed: () {
+                final name = controller.text.trim();
+                if (name.isNotEmpty) Navigator.pop(context, (name: name, color: color));
+              },
+              child: Text(context.l10n.create),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(controller.dispose);
+  }
+
+  static Future<String?> _askPassword(BuildContext context) {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.l10n.changePassword),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          obscureText: true,
+          decoration: InputDecoration(labelText: context.l10n.password),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(context.l10n.cancel)),
+          TextButton(
+              onPressed: () => Navigator.pop(context, controller.text),
+              child: Text(context.l10n.ok)),
+        ],
+      ),
+    ).whenComplete(controller.dispose);
   }
 
   static Future<String?> _askName(BuildContext context, String current) {

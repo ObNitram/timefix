@@ -4,4 +4,8 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Debug builds only: allow plain HTTP to test against a local CalDAV
+         server (e.g. http://10.0.2.2:8080 from the emulator). Release builds
+         require HTTPS. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

@@ -89,6 +89,7 @@ class IcalService {
           allDay: e.allDay,
           timeZone: e.timeZone,
           rrule: e.recurrenceId == null ? e.rrule : null,
+          recurrenceId: e.recurrenceId,
           exdates: [...e.exdates, ...?extraExdates[e.uid]],
           color: e.color == null ? null : _cssColor(e.color!),
           updatedAt: e.lastModified,

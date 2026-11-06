@@ -115,5 +115,21 @@
   "colorGrape": "Grape",
   "colorGraphite": "Graphite",
   "repeat": "Repeat",
-  "googleReconnect": "Google sign-in required"
+  "googleReconnect": "Google sign-in required",
+  "sourceCalDav": "CalDAV account",
+  "sourceCalDavSubtitle": "Self-hosted TimeFix server, Nextcloud, Radicale, iCloud…",
+  "sourceTypeCalDav": "CalDAV",
+  "serverUrl": "Server address",
+  "serverUrlHint": "https://cal.example.com",
+  "username": "Username",
+  "password": "Password",
+  "connect": "Connect",
+  "caldavError": "Could not connect to CalDAV: {message}",
+  "caldavAuthError": "Wrong username or password",
+  "newCalendar": "New calendar",
+  "changePassword": "Change password",
+  "passwordUpdated": "Password updated",
+  "conflictError": "This event was changed elsewhere. Data has been refreshed: please try again.",
+  "caldavHelp": "For a TimeFix server, use the server address (e.g. https://cal.example.com) and the account created by the administrator.",
+  "account": "Account"
 }

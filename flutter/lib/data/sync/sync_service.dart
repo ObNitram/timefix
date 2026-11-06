@@ -3,11 +3,20 @@ import 'dart:ui' show Color;
 import 'package:uuid/uuid.dart';
 
 import '../../core/colors.dart';
+import '../../core/time_zone.dart';
 import '../../domain/models.dart';
+import '../caldav/caldav_client.dart';
 import '../calendar_repository.dart';
+import '../credentials.dart';
 import '../google/google_calendar_service.dart';
 import '../google/google_mapper.dart';
 import '../ical/ical_service.dart';
+import '../ical/ics_parser.dart';
+
+typedef CalDavClientFactory = CalDavClient Function(String username, String password);
+
+CalDavClient _defaultCalDavClient(String username, String password) =>
+    CalDavClient(username: username, password: password);
 
 const _uuid = Uuid();
 
@@ -27,13 +36,18 @@ class SyncService {
     required this.repository,
     required this.ical,
     required this.google,
+    CredentialStore? credentials,
+    CalDavClientFactory? caldavClientFactory,
     this.googlePastWindow = const Duration(days: 180),
     this.googleFutureWindow = const Duration(days: 730),
-  });
+  })  : credentials = credentials ?? InMemoryCredentialStore(),
+        caldavClientFactory = caldavClientFactory ?? _defaultCalDavClient;
 
   final CalendarRepository repository;
   final IcalService ical;
   final GoogleCalendarGateway google;
+  final CredentialStore credentials;
+  final CalDavClientFactory caldavClientFactory;
 
   /// Google events are fetched in `[now - past, now + future]`.
   final Duration googlePastWindow;
@@ -127,7 +141,58 @@ class SyncService {
     return (await repository.getSource(sourceId))!;
   }
 
+  /// Connects to a CalDAV server, stores the password securely and imports
+  /// the account's calendars. Nothing is saved if the connection fails.
+  Future<CalendarSource> addCalDavAccount({
+    required String serverUrl,
+    required String username,
+    required String password,
+  }) async {
+    final client = caldavClientFactory(username.trim(), password);
+    final account = await client.discover(serverUrl);
+    final sourceId = 'caldav:${_uuid.v4()}';
+    final source = CalendarSource(
+      id: sourceId,
+      type: SourceType.caldav,
+      name: '${username.trim()}@${account.home.host}',
+      url: account.home.toString(),
+      username: username.trim(),
+    );
+    await credentials.write(CredentialStore.caldavPasswordKey(sourceId), password);
+    await repository.upsertSource(source);
+    await _syncCalDav(source, client: client, calendars: account.calendars);
+    return (await repository.getSource(sourceId))!;
+  }
+
+  /// Client for a CalDAV source, using the stored password.
+  Future<CalDavClient> calDavClientFor(CalendarSource source) async {
+    final password = await credentials.read(CredentialStore.caldavPasswordKey(source.id));
+    if (password == null || source.username == null) {
+      throw CalDavAuthException();
+    }
+    return caldavClientFactory(source.username!, password);
+  }
+
+  /// Replaces the stored password after checking it against the server.
+  Future<void> updateCalDavPassword(CalendarSource source, String password) async {
+    final client = caldavClientFactory(source.username!, password);
+    await client.listCalendars(Uri.parse(source.url!));
+    await credentials.write(CredentialStore.caldavPasswordKey(source.id), password);
+    await syncSource(source);
+  }
+
+  /// Creates a calendar on the CalDAV server (MKCALENDAR) and imports it.
+  Future<void> createCalDavCalendar(CalendarSource source, String name, Color color) async {
+    final client = await calDavClientFor(source);
+    final slug = _uuid.v4();
+    await client.makeCalendar(Uri.parse(source.url!), slug, name, color);
+    await syncSource(source);
+  }
+
   Future<void> removeSource(CalendarSource source) async {
+    if (source.type == SourceType.caldav) {
+      await credentials.delete(CredentialStore.caldavPasswordKey(source.id));
+    }
     if (source.type == SourceType.google) {
       try {
         await google.signOut();
@@ -162,6 +227,8 @@ class SyncService {
           await _syncIcal(source);
         case SourceType.google:
           await _syncGoogle(source, interactive: interactive);
+        case SourceType.caldav:
+          await _syncCalDav(source);
       }
     } catch (e) {
       final current = await repository.getSource(source.id) ?? source;
@@ -186,6 +253,72 @@ class SyncService {
     await repository.replaceEvents(calendarId, IcalService.toEvents(cal, calendarId));
     await repository.upsertSource(
         source.copyWith(lastSyncedAt: DateTime.now(), clearError: true));
+  }
+
+  Future<void> _syncCalDav(
+    CalendarSource source, {
+    CalDavClient? client,
+    List<CalDavCalendar>? calendars,
+  }) async {
+    client ??= await calDavClientFor(source);
+    calendars ??= await client.listCalendars(Uri.parse(source.url!));
+    final existing = {
+      for (final c in await repository.getCalendars())
+        if (c.sourceId == source.id) c.remoteId: c
+    };
+    final seen = <String>{};
+    var order = 200;
+    for (final remote in calendars) {
+      final remoteId = remote.url.toString();
+      seen.add(remoteId);
+      final old = existing[remoteId];
+      final cal = CalendarInfo(
+        id: old?.id ?? '${source.id}:$remoteId',
+        sourceId: source.id,
+        remoteId: remoteId,
+        name: remote.displayName,
+        color: old?.color ?? remote.color ?? calendarPalette[6].color,
+        visible: old?.visible ?? true,
+        readOnly: remote.readOnly,
+        sortOrder: old?.sortOrder ?? order++,
+        syncToken: old?.syncToken,
+      );
+      await repository.upsertCalendar(cal);
+      // Only download calendars whose ctag changed.
+      if (remote.ctag == null || remote.ctag != old?.syncToken) {
+        await syncCalDavCalendar(cal, client: client, ctag: remote.ctag);
+      }
+    }
+    for (final old in existing.values) {
+      if (!seen.contains(old.remoteId)) await repository.deleteCalendar(old.id);
+    }
+    await repository.upsertSource(
+        source.copyWith(lastSyncedAt: DateTime.now(), clearError: true));
+  }
+
+  /// Re-downloads all the events of one CalDAV calendar.
+  Future<void> syncCalDavCalendar(CalendarInfo cal,
+      {CalDavClient? client, String? ctag, CalendarSource? source}) async {
+    if (client == null) {
+      source ??= await repository.getSource(cal.sourceId);
+      client = await calDavClientFor(source!);
+    }
+    final url = Uri.parse(cal.remoteId!);
+    ctag ??= await client.ctag(url);
+    final objects = await client.fetchEvents(url);
+    final parser = IcsParser(defaultLocation: deviceTimeZoneName == null ? null : deviceLocation);
+    final events = <CalendarEvent>[];
+    for (final o in objects) {
+      try {
+        events.addAll(IcalService.toEvents(parser.parse(o.data), cal.id)
+            .map((e) => e.copyWith(href: o.url.toString(), etag: o.etag)));
+      } catch (_) {
+        // Skip resources the parser cannot read.
+      }
+    }
+    await repository.replaceEvents(cal.id, events);
+    final current = await repository.getCalendar(cal.id) ?? cal;
+    await repository.upsertCalendar(current.copyWith(syncToken: ctag));
   }
 
   Future<void> _syncGoogle(CalendarSource source, {required bool interactive}) async {

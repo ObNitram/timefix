@@ -9,7 +9,11 @@ enum SourceType {
   ical,
 
   /// Google account, synced through the Google Calendar API.
-  google;
+  google,
+
+  /// CalDAV account (TimeFix server, Nextcloud, Radicale, iCloud…). Read and
+  /// write, the password lives in secure storage.
+  caldav;
 
   static SourceType fromName(String name) =>
       SourceType.values.firstWhere((t) => t.name == name, orElse: () => local);
@@ -23,6 +27,7 @@ class CalendarSource {
     required this.name,
     this.url,
     this.accountEmail,
+    this.username,
     this.lastSyncedAt,
     this.lastError,
   });
@@ -36,6 +41,9 @@ class CalendarSource {
 
   /// Account e-mail for [SourceType.google].
   final String? accountEmail;
+
+  /// Login for [SourceType.caldav] ([url] is then the calendar home URL).
+  final String? username;
   final DateTime? lastSyncedAt;
   final String? lastError;
 
@@ -45,6 +53,7 @@ class CalendarSource {
     String? name,
     String? url,
     String? accountEmail,
+    String? username,
     DateTime? lastSyncedAt,
     String? lastError,
     bool clearError = false,
@@ -55,6 +64,7 @@ class CalendarSource {
         name: name ?? this.name,
         url: url ?? this.url,
         accountEmail: accountEmail ?? this.accountEmail,
+        username: username ?? this.username,
         lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
         lastError: clearError ? null : (lastError ?? this.lastError),
       );
@@ -71,12 +81,14 @@ class CalendarInfo {
     this.visible = true,
     this.readOnly = false,
     this.sortOrder = 0,
+    this.syncToken,
   });
 
   final String id;
   final String sourceId;
 
-  /// Identifier on the remote service (Google calendar id).
+  /// Identifier on the remote service (Google calendar id, CalDAV collection
+  /// URL).
   final String? remoteId;
   final String name;
   final Color color;
@@ -84,12 +96,16 @@ class CalendarInfo {
   final bool readOnly;
   final int sortOrder;
 
+  /// Last seen change marker (CalDAV getctag), to skip unchanged calendars.
+  final String? syncToken;
+
   CalendarInfo copyWith({
     String? name,
     Color? color,
     bool? visible,
     bool? readOnly,
     int? sortOrder,
+    String? syncToken,
   }) =>
       CalendarInfo(
         id: id,
@@ -100,6 +116,7 @@ class CalendarInfo {
         visible: visible ?? this.visible,
         readOnly: readOnly ?? this.readOnly,
         sortOrder: sortOrder ?? this.sortOrder,
+        syncToken: syncToken ?? this.syncToken,
       );
 
   @override
@@ -112,7 +129,8 @@ class CalendarInfo {
       other.color == color &&
       other.visible == visible &&
       other.readOnly == readOnly &&
-      other.sortOrder == sortOrder;
+      other.sortOrder == sortOrder &&
+      other.syncToken == syncToken;
 
   @override
   int get hashCode => Object.hash(
@@ -142,6 +160,9 @@ class CalendarEvent {
     this.color,
     this.remoteId,
     this.recurringRemoteId,
+    this.href,
+    this.etag,
+    this.recurrenceId,
     this.updatedAt,
   });
 
@@ -172,6 +193,15 @@ class CalendarEvent {
 
   /// For an instance of a Google recurring event: the id of the series.
   final String? recurringRemoteId;
+
+  /// CalDAV resource URL and its ETag. A resource holds a recurring event and
+  /// its modified occurrences, which all share the same [href].
+  final String? href;
+  final String? etag;
+
+  /// Set when this event replaces one occurrence of a series (iCalendar
+  /// RECURRENCE-ID): original start of the replaced occurrence.
+  final DateTime? recurrenceId;
   final DateTime? updatedAt;
 
   bool get isRecurring => rrule != null && rrule!.isNotEmpty;
@@ -199,6 +229,10 @@ class CalendarEvent {
     String? remoteId,
     String? recurringRemoteId,
     bool clearRecurringRemoteId = false,
+    String? href,
+    String? etag,
+    DateTime? recurrenceId,
+    bool clearRecurrenceId = false,
     DateTime? updatedAt,
   }) =>
       CalendarEvent(
@@ -218,6 +252,9 @@ class CalendarEvent {
         recurringRemoteId: clearRecurringRemoteId
             ? null
             : (recurringRemoteId ?? this.recurringRemoteId),
+        href: href ?? this.href,
+        etag: etag ?? this.etag,
+        recurrenceId: clearRecurrenceId ? null : (recurrenceId ?? this.recurrenceId),
         updatedAt: updatedAt ?? this.updatedAt,
       );
 }

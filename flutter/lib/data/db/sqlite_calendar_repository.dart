@@ -18,7 +18,7 @@ class SqliteCalendarRepository implements CalendarRepository {
 
   final Database _db;
 
-  static const _version = 1;
+  static const _version = 2;
 
   static Future<SqliteCalendarRepository> open({
     DatabaseFactory? factory,
@@ -31,7 +31,13 @@ class SqliteCalendarRepository implements CalendarRepository {
       options: OpenDatabaseOptions(
         version: _version,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
-        onCreate: (db, version) => _createSchema(db),
+        onCreate: (db, version) async {
+          await _createSchema(db);
+          await _migrateToV2(db);
+        },
+        onUpgrade: (db, from, to) async {
+          if (from < 2) await _migrateToV2(db);
+        },
       ),
     );
     return SqliteCalendarRepository(db);
@@ -84,6 +90,18 @@ class SqliteCalendarRepository implements CalendarRepository {
     await batch.commit(noResult: true);
   }
 
+  /// v2: CalDAV support.
+  static Future<void> _migrateToV2(Database db) async {
+    final batch = db.batch();
+    batch.execute('ALTER TABLE sources ADD COLUMN username TEXT');
+    batch.execute('ALTER TABLE calendars ADD COLUMN sync_token TEXT');
+    batch.execute('ALTER TABLE events ADD COLUMN href TEXT');
+    batch.execute('ALTER TABLE events ADD COLUMN etag TEXT');
+    batch.execute('ALTER TABLE events ADD COLUMN recurrence_id INTEGER');
+    batch.execute('CREATE INDEX idx_events_href ON events(href)');
+    await batch.commit(noResult: true);
+  }
+
   Future<void> close() => _db.close();
 
   // ---------------------------------------------------------------------------
@@ -121,6 +139,7 @@ class SqliteCalendarRepository implements CalendarRepository {
           'name': s.name,
           'url': s.url,
           'account_email': s.accountEmail,
+          'username': s.username,
           'last_synced_at': s.lastSyncedAt?.millisecondsSinceEpoch,
           'last_error': s.lastError,
         },
@@ -136,6 +155,7 @@ class SqliteCalendarRepository implements CalendarRepository {
         name: r['name'] as String,
         url: r['url'] as String?,
         accountEmail: r['account_email'] as String?,
+        username: r['username'] as String?,
         lastSyncedAt: r['last_synced_at'] == null
             ? null
             : DateTime.fromMillisecondsSinceEpoch(r['last_synced_at'] as int),
@@ -170,6 +190,7 @@ class SqliteCalendarRepository implements CalendarRepository {
           'visible': c.visible ? 1 : 0,
           'read_only': c.readOnly ? 1 : 0,
           'sort_order': c.sortOrder,
+          'sync_token': c.syncToken,
         },
       );
 
@@ -186,6 +207,7 @@ class SqliteCalendarRepository implements CalendarRepository {
         visible: (r['visible'] as int) == 1,
         readOnly: (r['read_only'] as int) == 1,
         sortOrder: r['sort_order'] as int,
+        syncToken: r['sync_token'] as String?,
       );
 
   // ---------------------------------------------------------------------------
@@ -236,6 +258,13 @@ class SqliteCalendarRepository implements CalendarRepository {
       });
 
   @override
+  Future<List<CalendarEvent>> eventsByHref(String calendarId, String href) async {
+    final rows = await _db.query('events',
+        where: 'calendar_id = ? AND href = ?', whereArgs: [calendarId, href]);
+    return rows.map(_eventFromRow).toList();
+  }
+
+  @override
   Future<List<CalendarEvent>> searchEvents(String query, Set<String> calendarIds,
       {int limit = 200}) async {
     if (calendarIds.isEmpty || query.trim().isEmpty) return const [];
@@ -278,6 +307,10 @@ class SqliteCalendarRepository implements CalendarRepository {
             ? null
             : jsonEncode([for (final d in e.exdates) _encodeDate(d, e.allDay)]),
         'color': e.color?.toARGB32(),
+        'href': e.href,
+        'etag': e.etag,
+        'recurrence_id':
+            e.recurrenceId == null ? null : _encodeDate(e.recurrenceId!, e.allDay),
         'updated_at': e.updatedAt?.millisecondsSinceEpoch,
       };
 
@@ -304,6 +337,11 @@ class SqliteCalendarRepository implements CalendarRepository {
                 _decodeDate(v, allDay)
             ],
       color: r['color'] == null ? null : Color(r['color'] as int),
+      href: r['href'] as String?,
+      etag: r['etag'] as String?,
+      recurrenceId: r['recurrence_id'] == null
+          ? null
+          : _decodeDate(r['recurrence_id'] as int, allDay),
       updatedAt: r['updated_at'] == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(r['updated_at'] as int),

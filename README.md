@@ -4,8 +4,17 @@ Clone mobile de Google Calendar.
 
 | Dossier | Contenu | État |
 |---|---|---|
-| [`flutter/`](flutter/README.md) | Application mobile Android / iOS (Flutter) | ✅ v1 |
-| `backend/` | API C# (ASP.NET Core) déployée avec Docker | à venir |
+| [`flutter/`](flutter/README.md) | Application mobile Android / iOS (Flutter) : planning, semaine, mois ; calendriers locaux, iCal, Google et CalDAV | ✅ |
+| [`backend/`](backend/README.md) | Serveur CalDAV auto-hébergé en C# (ASP.NET Core), Docker, PostgreSQL ou SQLite | ✅ |
 
-Voir [flutter/README.md](flutter/README.md) pour lancer l'application,
-configurer Google Calendar et exécuter les tests.
+Démarrage rapide du serveur :
+
+```bash
+cd backend
+cp .env.example .env
+docker compose up -d
+```
+
+Puis, dans l'application : **Ajouter un calendrier → Compte CalDAV**.
+
+Voir [flutter/README.md](flutter/README.md) et [backend/README.md](backend/README.md).

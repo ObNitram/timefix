@@ -93,9 +93,11 @@ class EventDetailsScreen extends ConsumerWidget {
                   Text(calendar.name, style: textTheme.bodyLarge),
                   if (source != null)
                     Text(
-                      source.type == SourceType.google
-                          ? (source.accountEmail ?? source.name)
-                          : _sourceLabel(context, source.type),
+                      switch (source.type) {
+                        SourceType.google => source.accountEmail ?? source.name,
+                        SourceType.caldav => source.name,
+                        _ => _sourceLabel(context, source.type),
+                      },
                       style: textTheme.bodySmall?.copyWith(color: scheme.mutedText),
                     ),
                   if (calendar.readOnly)
@@ -116,6 +118,7 @@ class EventDetailsScreen extends ConsumerWidget {
         SourceType.local => context.l10n.sourceTypeLocal,
         SourceType.ical => context.l10n.sourceTypeIcal,
         SourceType.google => context.l10n.sourceTypeGoogle,
+        SourceType.caldav => context.l10n.sourceTypeCalDav,
       };
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {

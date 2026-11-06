@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/colors.dart';
+import '../../data/caldav/caldav_client.dart';
 import '../../domain/models.dart';
 import '../format.dart';
 
@@ -216,9 +217,19 @@ Future<bool> runGuarded(BuildContext context, Future<void> Function() action) as
     await action();
     return true;
   } catch (e) {
-    if (context.mounted) showSnack(context, context.l10n.errorMessage('$e'));
+    if (context.mounted) showSnack(context, describeError(context, e));
     return false;
   }
+}
+
+/// User-facing message for an exception.
+String describeError(BuildContext context, Object e) {
+  final l10n = context.l10n;
+  return switch (e) {
+    CalDavConflictException() => l10n.conflictError,
+    CalDavAuthException() => l10n.caldavAuthError,
+    _ => l10n.errorMessage('$e'),
+  };
 }
 
 /// Utility to keep a widget in sync with a periodic timer.

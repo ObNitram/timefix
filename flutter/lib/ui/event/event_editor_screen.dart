@@ -50,8 +50,10 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
   bool get _isNew => widget.occurrence == null;
   CalendarEvent? get _original => widget.occurrence?.event;
 
-  /// Google instances of a series can only be edited one at a time.
-  bool get _isSeriesInstance => _original?.recurringRemoteId != null;
+  /// Google instances of a series and CalDAV modified occurrences can only be
+  /// edited one at a time.
+  bool get _isSeriesInstance =>
+      _original?.recurringRemoteId != null || _original?.recurrenceId != null;
 
   @override
   void initState() {

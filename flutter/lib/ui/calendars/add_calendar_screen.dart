@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/colors.dart';
+import '../../data/caldav/caldav_client.dart';
 import '../../data/ical/ical_service.dart';
 import '../../state/providers.dart';
 import '../format.dart';
@@ -68,6 +69,14 @@ class _AddCalendarScreenState extends ConsumerState<AddCalendarScreen> {
               subtitle: Text(l10n.sourceIcalSubtitle),
               onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                 builder: (_) => const IcalSubscriptionScreen(),
+              )),
+            ),
+            ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.dns_outlined)),
+              title: Text(l10n.sourceCalDav),
+              subtitle: Text(l10n.sourceCalDavSubtitle),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => const CalDavAccountScreen(),
               )),
             ),
             ListTile(
@@ -260,6 +269,143 @@ class _IcalSubscriptionScreenState extends ConsumerState<IcalSubscriptionScreen>
             Text(l10n.sourceIcalSubtitle,
                 style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.mutedText)),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Form to connect a CalDAV account (TimeFix server, Nextcloud, Radicale…).
+class CalDavAccountScreen extends ConsumerStatefulWidget {
+  const CalDavAccountScreen({super.key});
+
+  @override
+  ConsumerState<CalDavAccountScreen> createState() => _CalDavAccountScreenState();
+}
+
+class _CalDavAccountScreenState extends ConsumerState<CalDavAccountScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _url = TextEditingController();
+  final _username = TextEditingController();
+  final _password = TextEditingController();
+  bool _busy = false;
+  bool _obscure = true;
+  String? _error;
+
+  @override
+  void dispose() {
+    _url.dispose();
+    _username.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final l10n = context.l10n;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(syncServiceProvider).addCalDavAccount(
+            serverUrl: _url.text,
+            username: _username.text,
+            password: _password.text,
+          );
+      ref.read(dataRevisionProvider.notifier).bump();
+      if (!mounted) return;
+      showSnack(context, l10n.calendarAdded);
+      Navigator.of(context)
+        ..pop()
+        ..pop();
+    } on CalDavAuthException {
+      setState(() => _error = l10n.caldavAuthError);
+    } catch (e) {
+      setState(() => _error = l10n.caldavError('$e'));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    String? required(String? v) => (v == null || v.trim().isEmpty) ? l10n.requiredField : null;
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.sourceCalDav)),
+      body: Form(
+        key: _formKey,
+        child: AutofillGroup(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              TextFormField(
+                controller: _url,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                decoration: InputDecoration(
+                  labelText: l10n.serverUrl,
+                  hintText: l10n.serverUrlHint,
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.dns_outlined),
+                ),
+                validator: (v) {
+                  if (required(v) case final error?) return error;
+                  try {
+                    CalDavClient.normalizeServerUrl(v!);
+                    return null;
+                  } catch (_) {
+                    return l10n.invalidUrl;
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _username,
+                autocorrect: false,
+                autofillHints: const [AutofillHints.username],
+                decoration: InputDecoration(
+                  labelText: l10n.username,
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.person_outline),
+                ),
+                validator: required,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _password,
+                obscureText: _obscure,
+                autofillHints: const [AutofillHints.password],
+                decoration: InputDecoration(
+                  labelText: l10n.password,
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                  ),
+                ),
+                validator: (v) => (v == null || v.isEmpty) ? l10n.requiredField : null,
+                onFieldSubmitted: (_) => _submit(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 16),
+                Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              ],
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: _busy ? null : _submit,
+                icon: _busy
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.login),
+                label: Text(l10n.connect),
+              ),
+              const SizedBox(height: 12),
+              Text(l10n.caldavHelp,
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.mutedText)),
+            ],
+          ),
         ),
       ),
     );

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:googleapis/calendar/v3.dart' as gcal;
@@ -74,6 +75,42 @@ void main() {
     expect(back.color, const Color(0xFFD50000));
     final occ = await occurrences(DateRange(DateTime(2026, 11, 1), DateTime(2026, 11, 8)));
     expect(occ.map((o) => o.start.day), [2, 3, 5, 6, 7]);
+  });
+
+  test('a version 1 database is migrated to version 2', () async {
+    final path = '${Directory.systemTemp.path}/timefix-v1-${DateTime.now().microsecondsSinceEpoch}.db';
+    final v1 = await databaseFactoryFfi.openDatabase(path,
+        options: OpenDatabaseOptions(
+          version: 1,
+          onCreate: (db, _) async {
+            await db.execute('CREATE TABLE sources (id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, '
+                'url TEXT, account_email TEXT, last_synced_at INTEGER, last_error TEXT)');
+            await db.execute('CREATE TABLE calendars (id TEXT PRIMARY KEY, source_id TEXT NOT NULL, remote_id TEXT, '
+                'name TEXT NOT NULL, color INTEGER NOT NULL, visible INTEGER NOT NULL DEFAULT 1, '
+                'read_only INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0)');
+            await db.execute('CREATE TABLE events (id TEXT PRIMARY KEY, calendar_id TEXT NOT NULL, remote_id TEXT, '
+                'recurring_remote_id TEXT, title TEXT NOT NULL, description TEXT, location TEXT, '
+                'start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL, all_day INTEGER NOT NULL DEFAULT 0, '
+                'time_zone TEXT, rrule TEXT, exdates TEXT, color INTEGER, updated_at INTEGER)');
+            await db.insert('sources', {'id': 's', 'type': 'local', 'name': 'Local'});
+            await db.insert('calendars', {'id': 'c', 'source_id': 's', 'name': 'Cal', 'color': 0xFF000000});
+            await db.insert('events', {'id': 'old', 'calendar_id': 'c', 'title': 'Ancien',
+              'start_ms': 0, 'end_ms': 3600000});
+          },
+        ));
+    await v1.close();
+
+    final migrated = await SqliteCalendarRepository.open(factory: databaseFactoryFfi, path: path);
+    expect((await migrated.getEvent('old'))!.title, 'Ancien');
+    await migrated.upsertEvent((await migrated.getEvent('old'))!
+        .copyWith(href: 'https://x/a.ics', etag: '"e"', recurrenceId: DateTime(2026)));
+    final back = (await migrated.getEvent('old'))!;
+    expect((back.href, back.etag, back.recurrenceId), ('https://x/a.ics', '"e"', DateTime(2026)));
+    await migrated.upsertCalendar((await migrated.getCalendar('c'))!.copyWith(syncToken: 'ctag-1'));
+    expect((await migrated.getCalendar('c'))!.syncToken, 'ctag-1');
+    expect(await migrated.eventsByHref('c', 'https://x/a.ics'), hasLength(1));
+    await migrated.close();
+    await File(path).delete();
   });
 
   test('updating a calendar or source keeps its events', () async {

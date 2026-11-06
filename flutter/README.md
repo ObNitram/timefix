@@ -10,7 +10,7 @@ Clone de l'application mobile Google Calendar, pour Android et iOS.
 | **Navigation** | Tiroir latéral (vues + calendriers à cocher), titre du mois cliquable avec mini-calendrier, bouton « aujourd'hui », recherche |
 | **Événements** | Création / modification / suppression, journée entière, multi-jours, couleur par événement, lieu, description, déplacement entre calendriers |
 | **Récurrence** | Tous les jours / semaines / mois / ans / jours ouvrables ; affichage des règles RRULE quelconques ; modification ou suppression de « cet événement », « cet événement et les suivants » ou « tous les événements » |
-| **Sources** | Calendriers **locaux** · abonnements **iCal** (`https://`, `webcal://`) en lecture seule · compte **Google** (lecture + écriture) |
+| **Sources** | Calendriers **locaux** · abonnements **iCal** (`https://`, `webcal://`) en lecture seule · compte **Google** (lecture + écriture) · comptes **CalDAV** (serveur TimeFix auto-hébergé, Nextcloud, Radicale…) en lecture + écriture, création de calendriers |
 | **Synchro** | Au démarrage, au retour au premier plan, et via « Actualiser » |
 | **Divers** | Français + anglais (selon la langue du téléphone), thème clair / sombre, premier jour de la semaine, durée par défaut |
 
@@ -35,6 +35,7 @@ lib/
 │   ├── db/          stockage SQLite (sqflite)
 │   ├── ical/        parseur .ics et téléchargement des abonnements
 │   ├── google/      API Google Calendar (google_sign_in + googleapis)
+│   ├── caldav/      client CalDAV et écriture des événements (ETags, RECURRENCE-ID)
 │   ├── sync/        import / synchronisation des sources
 │   └── event_service.dart   création / modification / suppression (locale ou Google)
 ├── state/           providers Riverpod (données, paramètres, navigation, synchro)
@@ -59,6 +60,31 @@ Principes :
   une fenêtre de 6 mois dans le passé à 2 ans dans le futur.
 * L'accès aux données passe par l'interface `CalendarRepository` : le futur
   backend C# pourra la remplacer sans toucher à l'interface utilisateur.
+
+## CalDAV
+
+**Ajouter un calendrier → Compte CalDAV**, avec l'adresse du serveur,
+l'identifiant et le mot de passe. L'application trouve elle-même les
+calendriers (`/.well-known/caldav`, principal, `calendar-home-set`).
+
+* Le mot de passe est stocké dans le stockage sécurisé du téléphone (Keychain /
+  Keystore), jamais dans la base de données.
+* Seuls les calendriers dont le `getctag` a changé sont re-téléchargés.
+* Chaque modification est envoyée immédiatement avec une précondition `If-Match` :
+  si l'événement a été modifié ailleurs entre-temps, rien n'est écrasé, les
+  données sont actualisées et un message invite à recommencer.
+* Modifier une seule occurrence d'une série crée une exception `RECURRENCE-ID`
+  dans la même ressource, comme le font les autres clients CalDAV.
+* Depuis l'écran du compte (Paramètres → le compte), on peut créer un
+  calendrier sur le serveur ou changer le mot de passe.
+
+Limites : l'application fonctionne en ligne pour les écritures CalDAV ; les
+propriétés qu'elle ne connaît pas (rappels, invités…) d'un événement créé par
+un autre client sont perdues si on le modifie depuis TimeFix.
+
+Pour tester contre un serveur local en HTTP : les builds Android de debug
+autorisent le HTTP en clair (depuis l'émulateur, le PC est `http://10.0.2.2:8080`),
+iOS l'autorise vers les adresses locales. En production, utiliser HTTPS.
 
 ## Configurer Google Calendar
 
@@ -93,10 +119,19 @@ flutter test
 ```
 
 Les tests couvrent le calcul des récurrences (y compris changement d'heure),
-le parseur iCal, les algorithmes de placement, le stockage SQLite, la
-synchronisation iCal / Google (API simulée) et les principaux parcours de
-l'interface (navigation entre vues, création, suppression, masquage d'un
-calendrier).
+le parseur et le générateur iCal, le client CalDAV, les algorithmes de
+placement, le stockage SQLite (dont la migration de schéma), la synchronisation
+iCal / Google (API simulée) et les principaux parcours de l'interface.
+
+Tests de bout en bout contre un vrai serveur TimeFix (ignorés sans serveur) :
+
+```bash
+cd ../backend && dotnet run --project src/TimeFix.Server --urls http://127.0.0.1:5080
+```
+
+```bash
+TIMEFIX_CALDAV_URL=http://127.0.0.1:5080 TIMEFIX_CALDAV_ADMIN=admin:admin-dev-password flutter test test/integration/caldav_server_test.dart
+```
 
 Captures d'écran des écrans principaux (générées dans `build/screenshots/`) :
 
@@ -106,8 +141,7 @@ flutter test test/screenshot_test.dart --update-goldens --dart-define=SCREENSHOT
 
 ## Prochaines étapes
 
-* Backend C# (ASP.NET Core) déployé avec Docker : comptes utilisateurs,
-  synchronisation multi-appareils, multi-comptes Google, rafraîchissement
-  des abonnements iCal côté serveur.
+* Synchronisation Google et iCal côté serveur (multi-comptes Google).
+* Mode hors ligne pour CalDAV (file d'attente des modifications).
 * Vues Jour et 3 jours (la grille de la vue Semaine accepte déjà un nombre de jours).
 * Rappels / notifications, invités, fuseau horaire par événement dans l'éditeur.

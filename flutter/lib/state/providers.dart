@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/date_utils.dart';
+import '../data/caldav/caldav_client.dart';
 import '../data/calendar_repository.dart';
+import '../data/credentials.dart';
 import '../data/event_service.dart';
 import '../data/google/google_calendar_service.dart';
 import '../data/ical/ical_service.dart';
@@ -22,10 +24,19 @@ final googleGatewayProvider =
 
 final icalServiceProvider = Provider<IcalService>((ref) => IcalService());
 
+final credentialStoreProvider =
+    Provider<CredentialStore>((ref) => const SecureCredentialStore());
+
+/// Creates CalDAV clients (overridden in tests).
+final calDavClientFactoryProvider = Provider<CalDavClientFactory>(
+    (ref) => (username, password) => CalDavClient(username: username, password: password));
+
 final syncServiceProvider = Provider<SyncService>((ref) => SyncService(
       repository: ref.watch(repositoryProvider),
       ical: ref.watch(icalServiceProvider),
       google: ref.watch(googleGatewayProvider),
+      credentials: ref.watch(credentialStoreProvider),
+      caldavClientFactory: ref.watch(calDavClientFactoryProvider),
     ));
 
 final eventServiceProvider = Provider<EventService>((ref) => EventService(

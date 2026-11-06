@@ -455,4 +455,57 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get googleReconnect => 'Reconnexion à Google nécessaire';
+
+  @override
+  String get sourceCalDav => 'Compte CalDAV';
+
+  @override
+  String get sourceCalDavSubtitle =>
+      'Serveur TimeFix auto-hébergé, Nextcloud, Radicale, iCloud…';
+
+  @override
+  String get sourceTypeCalDav => 'CalDAV';
+
+  @override
+  String get serverUrl => 'Adresse du serveur';
+
+  @override
+  String get serverUrlHint => 'https://cal.exemple.fr';
+
+  @override
+  String get username => 'Identifiant';
+
+  @override
+  String get password => 'Mot de passe';
+
+  @override
+  String get connect => 'Se connecter';
+
+  @override
+  String caldavError(String message) {
+    return 'Connexion CalDAV impossible : $message';
+  }
+
+  @override
+  String get caldavAuthError => 'Identifiant ou mot de passe incorrect';
+
+  @override
+  String get newCalendar => 'Nouveau calendrier';
+
+  @override
+  String get changePassword => 'Modifier le mot de passe';
+
+  @override
+  String get passwordUpdated => 'Mot de passe mis à jour';
+
+  @override
+  String get conflictError =>
+      'Cet événement a été modifié ailleurs. Les données ont été actualisées : réessayez.';
+
+  @override
+  String get caldavHelp =>
+      'Pour un serveur TimeFix, utilisez l\'adresse du serveur (ex. https://cal.exemple.fr) et le compte créé par l\'administrateur.';
+
+  @override
+  String get account => 'Compte';
 }

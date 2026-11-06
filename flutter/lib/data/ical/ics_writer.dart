@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../domain/models.dart';
+import '../../domain/reminders.dart';
 
 /// Serializes events into an iCalendar resource (RFC 5545).
 class IcsWriter {
@@ -56,10 +57,34 @@ class IcsWriter {
         lines.add('X-TIMEFIX-COLOR:#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}');
       }
       if (e.updatedAt != null) lines.add('LAST-MODIFIED:${_utc(e.updatedAt!)}');
+      for (final r in e.reminders) {
+        lines.addAll(_alarm(r, e.title));
+      }
       lines.add('END:VEVENT');
     }
     lines.add('END:VCALENDAR');
     return '${lines.map(fold).join('\r\n')}\r\n';
+  }
+
+  /// A VALARM understood by any client (DISPLAY, or AUDIO for alarms), with
+  /// the TimeFix type in an extension property.
+  static List<String> _alarm(Reminder r, String title) => [
+        'BEGIN:VALARM',
+        'ACTION:${r.type == ReminderType.alarm ? 'AUDIO' : 'DISPLAY'}',
+        'TRIGGER:${triggerValue(r.minutesBefore)}',
+        'DESCRIPTION:${_escape(title.isEmpty ? 'Reminder' : title)}',
+        'X-TIMEFIX-REMINDER-TYPE:${r.type.icsValue}',
+        'END:VALARM',
+      ];
+
+  /// RFC 5545 duration relative to the start: "-PT10M", "-P1D", "PT9H".
+  static String triggerValue(int minutesBefore) {
+    if (minutesBefore == 0) return 'PT0S';
+    final sign = minutesBefore > 0 ? '-' : '';
+    final m = minutesBefore.abs();
+    if (m % (24 * 60) == 0) return '${sign}P${m ~/ (24 * 60)}D';
+    if (m % 60 == 0) return '${sign}PT${m ~/ 60}H';
+    return '${sign}PT${m}M';
   }
 
   static String _key(DateTime d, bool allDay) => allDay

@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/colors.dart';
 import '../../core/time_zone.dart';
 import '../../domain/models.dart';
+import '../../domain/reminders.dart';
 import '../caldav/caldav_client.dart';
 import '../calendar_repository.dart';
 import '../credentials.dart';
@@ -48,6 +49,9 @@ class SyncService {
   final GoogleCalendarGateway google;
   final CredentialStore credentials;
   final CalDavClientFactory caldavClientFactory;
+
+  /// Default reminders of each Google calendar (from the calendar list).
+  final Map<String, List<Reminder>> _googleDefaults = {};
 
   /// Google events are fetched in `[now - past, now + future]`.
   final Duration googlePastWindow;
@@ -310,7 +314,7 @@ class SyncService {
     final events = <CalendarEvent>[];
     for (final o in objects) {
       try {
-        events.addAll(IcalService.toEvents(parser.parse(o.data), cal.id)
+        events.addAll(IcalService.toEvents(parser.parse(o.data), cal.id, includeReminders: true)
             .map((e) => e.copyWith(href: o.url.toString(), etag: o.etag)));
       } catch (_) {
         // Skip resources the parser cannot read.
@@ -347,6 +351,7 @@ class SyncService {
         sortOrder: old?.sortOrder ?? (entry.primary == true ? 99 : order++),
       );
       await repository.upsertCalendar(cal);
+      _googleDefaults[cal.id] = GoogleMapper.remindersFrom(entry.defaultReminders);
       await syncGoogleCalendar(cal, interactive: interactive);
     }
     for (final old in existing.values) {
@@ -358,6 +363,15 @@ class SyncService {
 
   /// Re-downloads the events of one Google calendar.
   Future<void> syncGoogleCalendar(CalendarInfo cal, {bool interactive = false}) async {
+    if (!_googleDefaults.containsKey(cal.id)) {
+      // Needed to resolve events using the calendar's default reminders.
+      for (final entry in await google.listCalendars(interactive: interactive)) {
+        if (entry.id == cal.remoteId) {
+          _googleDefaults[cal.id] = GoogleMapper.remindersFrom(entry.defaultReminders);
+        }
+      }
+    }
+    final defaults = _googleDefaults[cal.id] ?? const <Reminder>[];
     final now = DateTime.now();
     final events = await google.listEvents(
       cal.remoteId!,
@@ -366,7 +380,7 @@ class SyncService {
       interactive: interactive,
     );
     final mapped = [
-      for (final e in events) ?GoogleMapper.fromGoogle(e, cal.id),
+      for (final e in events) ?GoogleMapper.fromGoogle(e, cal.id, calendarDefaults: defaults),
     ];
     await repository.replaceEvents(cal.id, mapped);
   }

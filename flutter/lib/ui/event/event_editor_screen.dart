@@ -6,6 +6,10 @@ import '../../core/date_utils.dart';
 import '../../data/event_service.dart';
 import '../../domain/models.dart';
 import '../../domain/recurrence.dart';
+import '../../domain/reminders.dart';
+import '../../state/reminder_settings.dart';
+import '../reminders/reminder_list_editor.dart';
+import '../reminders/reminder_permissions.dart';
 import '../../state/providers.dart';
 import '../../state/settings.dart';
 import '../format.dart';
@@ -44,6 +48,11 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
   String? _rrule;
   String? _calendarId;
   Color? _color;
+  List<Reminder> _reminders = const [];
+
+  /// False until the user changes the reminders: new events then follow the
+  /// default reminders of the all-day / timed mode.
+  bool _remindersTouched = false;
   bool _dirty = false;
   bool _saving = false;
 
@@ -71,12 +80,15 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
       _rrule = e.rrule;
       _calendarId = e.calendarId;
       _color = e.color;
+      _reminders = e.reminders;
+      _loadDeviceReminders(e);
     } else {
       final now = DateTime.now();
       _allDay = widget.initialAllDay;
       _start = widget.initialStart ?? DateTime(now.year, now.month, now.day, now.hour + 1);
       final minutes = ref.read(settingsProvider).defaultDurationMinutes;
       _end = _allDay ? _start : _start.add(Duration(minutes: minutes));
+      _reminders = ref.read(reminderSettingsProvider).defaultsFor(allDay: _allDay);
     }
     for (final c in [_title, _location, _description]) {
       c.addListener(_markDirty);
@@ -92,6 +104,13 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
   }
 
   void _markDirty() => _dirty = true;
+
+  /// Adds the reminders kept on this device (e.g. Google alarms).
+  Future<void> _loadDeviceReminders(CalendarEvent e) async {
+    final local = await ref.read(repositoryProvider).localReminders({localReminderKey(e)});
+    if (!mounted || _remindersTouched || local.isEmpty) return;
+    setState(() => _reminders = effectiveReminders(e, local));
+  }
 
   void _update(VoidCallback fn) => setState(() {
         fn();
@@ -147,6 +166,9 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
   void _toggleAllDay(bool value) {
     _update(() {
       _allDay = value;
+      if (_isNew && !_remindersTouched) {
+        _reminders = ref.read(reminderSettingsProvider).defaultsFor(allDay: value);
+      }
       if (!value) {
         final now = DateTime.now();
         _start = DateTime(_start.year, _start.month, _start.day,
@@ -246,6 +268,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
       color: _color,
       remoteId: base.remoteId,
       recurringRemoteId: base.recurringRemoteId,
+      reminders: _reminders,
     );
   }
 
@@ -282,7 +305,8 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
     setState(() => _saving = false);
     if (ok) {
       _dirty = false;
-      Navigator.of(context).pop(true);
+      await ensureReminderPermissions(context, ref, edited.reminders);
+      if (mounted) Navigator.of(context).pop(true);
     }
   }
 
@@ -398,6 +422,15 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
                               style: TextStyle(fontSize: 12, color: scheme.mutedText)),
                       ],
                     ),
+                  ),
+                  const Divider(),
+                  ReminderListEditor(
+                    reminders: _reminders,
+                    allDay: _allDay,
+                    onChanged: (list) => _update(() {
+                      _reminders = list;
+                      _remindersTouched = true;
+                    }),
                   ),
                   const Divider(),
                   _EditorRow(

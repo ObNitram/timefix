@@ -6,9 +6,11 @@ import 'package:timefix/app.dart';
 import 'package:timefix/core/colors.dart';
 import 'package:timefix/core/date_utils.dart';
 import 'package:timefix/data/calendar_repository.dart';
+import 'package:timefix/data/reminders/reminder_platform.dart';
 import 'package:timefix/data/google/google_calendar_service.dart';
 import 'package:timefix/domain/models.dart';
 import 'package:timefix/state/providers.dart';
+import 'package:timefix/state/reminder_providers.dart';
 import 'package:timefix/state/settings.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 
@@ -105,6 +107,7 @@ Future<InMemoryCalendarRepository> seededRepository({DateTime? today}) async {
 Future<Widget> buildTestApp({
   required CalendarRepository repository,
   GoogleCalendarGateway? google,
+  ReminderPlatform? reminders,
   Map<String, Object> prefs = const {},
 }) async {
   tzdata.initializeTimeZones();
@@ -115,6 +118,7 @@ Future<Widget> buildTestApp({
       sharedPreferencesProvider.overrideWithValue(sp),
       repositoryProvider.overrideWithValue(repository),
       googleGatewayProvider.overrideWithValue(google ?? FakeGoogleGateway()),
+      reminderPlatformProvider.overrideWithValue(reminders ?? FakeReminderPlatform()),
     ],
     child: const TimefixApp(syncOnStart: false),
   );

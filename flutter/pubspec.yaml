@@ -52,6 +52,9 @@ dependencies:
     sdk: flutter
   xml: ^7.1.0
   flutter_secure_storage: ^11.2.0
+  flutter_local_notifications: ^23.0.0
+  alarm_kit: ^0.1.1
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:
@@ -76,6 +79,9 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   generate: true
+  assets:
+    # iOS alarm sounds (copied to Library/Sounds at startup).
+    - assets/sounds/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

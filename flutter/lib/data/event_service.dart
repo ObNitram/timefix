@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../core/time_zone.dart';
 import 'caldav/caldav_event_writer.dart';
 import '../domain/models.dart';
+import '../domain/reminders.dart';
 import '../domain/recurrence.dart';
 import 'calendar_repository.dart';
 import 'google/google_calendar_service.dart';
@@ -43,12 +44,29 @@ class EventService {
     return (cal, source);
   }
 
+  /// Google keeps "popup" reminders; full-screen and alarm reminders (and
+  /// delays Google cannot express) stay on the device.
+  static ({List<Reminder> synced, List<Reminder> local}) splitGoogleReminders(
+      List<Reminder> reminders) {
+    final synced = reminders.where(GoogleMapper.isGoogleReminder).take(5).toList();
+    return (synced: synced, local: reminders.where((r) => !synced.contains(r)).toList());
+  }
+
+  /// Saves reminders that cannot be stored with the event on this device.
+  /// Local and CalDAV events keep all their reminders, so any leftover is
+  /// cleared.
+  Future<void> _storeLocalReminders(CalendarEvent stored, SourceType type, List<Reminder> all) async {
+    final local = type == SourceType.google ? splitGoogleReminders(all).local : const <Reminder>[];
+    await repository.setLocalReminders(localReminderKey(stored), local);
+  }
+
   /// Creates a new event.
   Future<void> create(CalendarEvent event) async {
     final (cal, source) = await _calendarAndSource(event.calendarId);
     if (cal.readOnly) throw ReadOnlyCalendarException();
     final e = event.copyWith(
       timeZone: event.timeZone ?? deviceTimeZoneName,
+      reminders: Reminder.normalize(event.reminders),
       updatedAt: DateTime.now(),
     );
     switch (source.type) {
@@ -57,6 +75,10 @@ class EventService {
       case SourceType.google:
         final created =
             await google.insertEvent(cal.remoteId!, GoogleMapper.toGoogle(e));
+        final key = e.isRecurring
+            ? localReminderKey(e.copyWith(calendarId: cal.id, recurringRemoteId: created.id))
+            : GoogleMapper.eventId(cal.id, created.id!);
+        await repository.setLocalReminders(key, splitGoogleReminders(e.reminders).local);
         if (e.isRecurring) {
           await sync.syncGoogleCalendar(cal, interactive: true);
         } else {
@@ -80,6 +102,7 @@ class EventService {
     final master = original.event;
     final (oldCal, oldSource) = await _calendarAndSource(master.calendarId);
     if (oldCal.readOnly) throw ReadOnlyCalendarException();
+    edited = edited.copyWith(reminders: Reminder.normalize(edited.reminders));
 
     // Moving to another calendar: create there, delete here.
     if (edited.calendarId != master.calendarId) {
@@ -97,13 +120,16 @@ class EventService {
     switch (oldSource.type) {
       case SourceType.local:
         await _updateLocal(original, edited, scope);
+        await _storeLocalReminders(master, oldSource.type, edited.reminders);
       case SourceType.google:
+        await _storeLocalReminders(master, oldSource.type, edited.reminders);
         // Google instances are stored individually: edit this one only.
         await google.patchEvent(oldCal.remoteId!, master.remoteId!,
             GoogleMapper.toGoogle(edited, includeRecurrence: !master.isPartOfSeries));
         await sync.syncGoogleCalendar(oldCal, interactive: true);
       case SourceType.caldav:
         await _caldav.update(original, edited, scope, oldCal, oldSource);
+        await _storeLocalReminders(master, oldSource.type, edited.reminders);
       case SourceType.ical:
         throw ReadOnlyCalendarException();
     }

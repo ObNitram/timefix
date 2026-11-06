@@ -1,5 +1,7 @@
 import 'package:timezone/timezone.dart' as tz;
 
+import '../../domain/reminders.dart';
+
 /// A property line of an iCalendar file: `NAME;PARAM=VALUE:value`.
 class IcsProperty {
   IcsProperty(this.name, this.params, this.value);
@@ -28,6 +30,7 @@ class IcsEvent {
     this.cancelled = false,
     this.lastModified,
     this.color,
+    this.reminders = const [],
   });
 
   final String uid;
@@ -48,6 +51,9 @@ class IcsEvent {
 
   /// Optional `COLOR` property (CSS color name or hex).
   final String? color;
+
+  /// VALARMs with a usable trigger, converted to reminders.
+  final List<Reminder> reminders;
 }
 
 class IcsCalendar {
@@ -86,6 +92,8 @@ class IcsParser {
     final events = <IcsEvent>[];
     final stack = <String>[];
     List<IcsProperty>? current;
+    var alarms = <List<IcsProperty>>[];
+    List<IcsProperty>? alarm;
 
     for (final line in lines) {
       if (line.trim().isEmpty) continue;
@@ -95,14 +103,20 @@ class IcsParser {
         stack.add(prop.value.toUpperCase());
         if (prop.value.toUpperCase() == 'VEVENT' && stack.length == 2) {
           current = [];
+          alarms = [];
+        } else if (prop.value.toUpperCase() == 'VALARM' && current != null && stack.length == 3) {
+          alarm = [];
         }
         continue;
       }
       if (prop.name == 'END') {
         final ended = stack.isNotEmpty ? stack.removeLast() : '';
-        if (ended == 'VEVENT' && current != null) {
+        if (ended == 'VALARM' && alarm != null) {
+          alarms.add(alarm);
+          alarm = null;
+        } else if (ended == 'VEVENT' && current != null) {
           final calLocation = _location(calTz) ?? defaultLocation;
-          final e = _buildEvent(current, calLocation, calTz);
+          final e = _buildEvent(current, calLocation, calTz, alarms);
           if (e != null) events.add(e);
           current = null;
         }
@@ -121,6 +135,8 @@ class IcsParser {
         }
       } else if (current != null && stack.length == 2) {
         current.add(prop);
+      } else if (alarm != null && stack.length == 3) {
+        alarm.add(prop);
       }
     }
 
@@ -128,8 +144,8 @@ class IcsParser {
         name: calName, color: calColor, timeZone: calTz, events: events);
   }
 
-  IcsEvent? _buildEvent(
-      List<IcsProperty> props, tz.Location? calLocation, String? calTz) {
+  IcsEvent? _buildEvent(List<IcsProperty> props, tz.Location? calLocation, String? calTz,
+      [List<List<IcsProperty>> alarms = const []]) {
     IcsProperty? get(String name) {
       for (final p in props) {
         if (p.name == name) return p;
@@ -199,7 +215,44 @@ class IcsParser {
       lastModified:
           lastModProp == null ? null : parseDateValue(lastModProp, null)?.value,
       color: get('X-TIMEFIX-COLOR')?.value ?? get('COLOR')?.value,
+      reminders: Reminder.normalize([
+        for (final a in alarms) ?_reminder(a, startParsed.value, end, calLocation),
+      ]),
     );
+  }
+
+  /// Converts a VALARM to a reminder. E-mail alarms and alarms without a
+  /// usable trigger are ignored. Alarms written by other clients become
+  /// standard notifications.
+  Reminder? _reminder(
+      List<IcsProperty> alarm, DateTime start, DateTime end, tz.Location? calLocation) {
+    IcsProperty? get(String name) {
+      for (final p in alarm) {
+        if (p.name == name) return p;
+      }
+      return null;
+    }
+
+    final action = get('ACTION')?.value.trim().toUpperCase();
+    if (action != 'DISPLAY' && action != 'AUDIO') return null;
+    final trigger = get('TRIGGER');
+    if (trigger == null) return null;
+
+    int? minutesBefore;
+    if (trigger.param('VALUE')?.toUpperCase() == 'DATE-TIME') {
+      final at = parseDateValue(trigger, calLocation)?.value;
+      if (at != null) minutesBefore = start.difference(at).inMinutes;
+    } else {
+      final offset = parseDuration(trigger.value);
+      if (offset != null) {
+        final relatedToEnd = trigger.param('RELATED')?.toUpperCase() == 'END';
+        final fire = (relatedToEnd ? end : start).add(offset);
+        minutesBefore = start.difference(fire).inMinutes;
+      }
+    }
+    if (minutesBefore == null || minutesBefore.abs() > maxReminderMinutes) return null;
+    final type = ReminderType.fromIcs(get('X-TIMEFIX-REMINDER-TYPE')?.value) ?? ReminderType.push;
+    return Reminder(minutesBefore, type);
   }
 
   String? _optText(String? v) {

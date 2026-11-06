@@ -1,5 +1,7 @@
 import 'package:flutter/painting.dart';
 
+import 'reminders.dart';
+
 /// Where a group of calendars comes from.
 enum SourceType {
   /// Stored only on the device. Fully editable.
@@ -163,6 +165,7 @@ class CalendarEvent {
     this.href,
     this.etag,
     this.recurrenceId,
+    this.reminders = const [],
     this.updatedAt,
   });
 
@@ -202,6 +205,10 @@ class CalendarEvent {
   /// Set when this event replaces one occurrence of a series (iCalendar
   /// RECURRENCE-ID): original start of the replaced occurrence.
   final DateTime? recurrenceId;
+
+  /// Reminders stored with the event (synced for CalDAV, local otherwise).
+  /// Reminders on read-only events live in the repository's local reminders.
+  final List<Reminder> reminders;
   final DateTime? updatedAt;
 
   bool get isRecurring => rrule != null && rrule!.isNotEmpty;
@@ -233,6 +240,7 @@ class CalendarEvent {
     String? etag,
     DateTime? recurrenceId,
     bool clearRecurrenceId = false,
+    List<Reminder>? reminders,
     DateTime? updatedAt,
   }) =>
       CalendarEvent(
@@ -255,9 +263,20 @@ class CalendarEvent {
         href: href ?? this.href,
         etag: etag ?? this.etag,
         recurrenceId: clearRecurrenceId ? null : (recurrenceId ?? this.recurrenceId),
+        reminders: reminders ?? this.reminders,
         updatedAt: updatedAt ?? this.updatedAt,
       );
 }
+
+/// Key of the device-only reminders of an event. All instances of a Google
+/// recurring series share the key of the series.
+String localReminderKey(CalendarEvent e) => e.recurringRemoteId != null
+    ? '${e.calendarId}|series|${e.recurringRemoteId}'
+    : e.id;
+
+/// Reminders of an event: those stored with it plus the device-only ones.
+List<Reminder> effectiveReminders(CalendarEvent e, Map<String, List<Reminder>> local) =>
+    Reminder.normalize([...e.reminders, ...?local[localReminderKey(e)]]);
 
 /// One concrete occurrence of an event, ready to be displayed.
 class EventOccurrence {

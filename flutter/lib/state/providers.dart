@@ -9,7 +9,10 @@ import '../data/google/google_calendar_service.dart';
 import '../data/ical/ical_service.dart';
 import '../data/sync/sync_service.dart';
 import '../domain/models.dart';
-import '../domain/recurrence.dart';
+import '../domain/occurrences.dart';
+
+export '../domain/occurrences.dart';
+import '../domain/reminders.dart';
 
 // -----------------------------------------------------------------------------
 // Services
@@ -45,8 +48,6 @@ final eventServiceProvider = Provider<EventService>((ref) => EventService(
       sync: ref.watch(syncServiceProvider),
     ));
 
-const _expander = RecurrenceExpander();
-
 // -----------------------------------------------------------------------------
 // Data
 // -----------------------------------------------------------------------------
@@ -70,6 +71,14 @@ final calendarsProvider = FutureProvider<List<CalendarInfo>>((ref) {
   ref.watch(dataRevisionProvider);
   return ref.watch(repositoryProvider).getCalendars();
 });
+
+/// Device-only reminders of one event (by [localReminderKey]).
+final localRemindersProvider =
+    FutureProvider.family<List<Reminder>, String>((ref, key) async {
+  ref.watch(dataRevisionProvider);
+  final map = await ref.watch(repositoryProvider).localReminders({key});
+  return map[key] ?? const [];
+}, isAutoDispose: true);
 
 final calendarsByIdProvider = Provider<Map<String, CalendarInfo>>((ref) {
   final cals = ref.watch(calendarsProvider).value ?? const [];
@@ -101,34 +110,6 @@ final occurrencesProvider =
       await ref.watch(repositoryProvider).eventsForRange(range, visible.keys.toSet());
   return expandEvents(events, visible, range);
 }, isAutoDispose: true);
-
-List<EventOccurrence> expandEvents(Iterable<CalendarEvent> events,
-    Map<String, CalendarInfo> calendars, DateRange range) {
-  final result = <EventOccurrence>[];
-  for (final e in events) {
-    final cal = calendars[e.calendarId];
-    if (cal == null) continue;
-    for (final (start, end) in _expander.occurrences(e, range)) {
-      result.add(EventOccurrence(
-          event: e, start: start, end: end, color: e.color ?? cal.color));
-    }
-  }
-  result.sort(compareOccurrences);
-  return result;
-}
-
-/// Sort order used everywhere: by day, all-day events first, then by start
-/// time, longest first, then by title.
-int compareOccurrences(EventOccurrence a, EventOccurrence b) {
-  final day = dateOnly(a.start).compareTo(dateOnly(b.start));
-  if (day != 0) return day;
-  if (a.allDay != b.allDay) return a.allDay ? -1 : 1;
-  final s = a.start.compareTo(b.start);
-  if (s != 0) return s;
-  final d = b.end.compareTo(a.end);
-  if (d != 0) return d;
-  return a.title.compareTo(b.title);
-}
 
 // -----------------------------------------------------------------------------
 // Navigation state

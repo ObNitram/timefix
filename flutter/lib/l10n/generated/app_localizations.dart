@@ -889,6 +889,456 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Compte'**
   String get account;
+
+  /// No description provided for @reminders.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rappels'**
+  String get reminders;
+
+  /// No description provided for @addReminder.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ajouter un rappel'**
+  String get addReminder;
+
+  /// No description provided for @reminderTypePush.
+  ///
+  /// In fr, this message translates to:
+  /// **'Notification'**
+  String get reminderTypePush;
+
+  /// No description provided for @reminderTypeFullScreen.
+  ///
+  /// In fr, this message translates to:
+  /// **'Plein écran'**
+  String get reminderTypeFullScreen;
+
+  /// No description provided for @reminderTypeAlarm.
+  ///
+  /// In fr, this message translates to:
+  /// **'Alarme'**
+  String get reminderTypeAlarm;
+
+  /// No description provided for @reminderAtStart.
+  ///
+  /// In fr, this message translates to:
+  /// **'Au moment de l\'événement'**
+  String get reminderAtStart;
+
+  /// No description provided for @reminderMinutesBefore.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{1 minute avant} other{{count} minutes avant}}'**
+  String reminderMinutesBefore(num count);
+
+  /// No description provided for @reminderHoursBefore.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{1 heure avant} other{{count} heures avant}}'**
+  String reminderHoursBefore(num count);
+
+  /// No description provided for @reminderDaysBefore.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{1 jour avant} other{{count} jours avant}}'**
+  String reminderDaysBefore(num count);
+
+  /// No description provided for @reminderWeeksBefore.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{1 semaine avant} other{{count} semaines avant}}'**
+  String reminderWeeksBefore(num count);
+
+  /// No description provided for @reminderHoursMinutesBefore.
+  ///
+  /// In fr, this message translates to:
+  /// **'{hours} h {minutes} min avant'**
+  String reminderHoursMinutesBefore(int hours, int minutes);
+
+  /// No description provided for @reminderMinutesAfter.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} min après le début'**
+  String reminderMinutesAfter(int count);
+
+  /// No description provided for @reminderSameDayAt.
+  ///
+  /// In fr, this message translates to:
+  /// **'Le jour même à {time}'**
+  String reminderSameDayAt(String time);
+
+  /// No description provided for @reminderDayBeforeAt.
+  ///
+  /// In fr, this message translates to:
+  /// **'La veille à {time}'**
+  String reminderDayBeforeAt(String time);
+
+  /// No description provided for @reminderDaysBeforeAt.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} jours avant à {time}'**
+  String reminderDaysBeforeAt(int count, String time);
+
+  /// No description provided for @reminderCustom.
+  ///
+  /// In fr, this message translates to:
+  /// **'Personnalisé…'**
+  String get reminderCustom;
+
+  /// No description provided for @reminderCustomTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rappel personnalisé'**
+  String get reminderCustomTitle;
+
+  /// No description provided for @myPresets.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mes presets'**
+  String get myPresets;
+
+  /// No description provided for @unitMinutes.
+  ///
+  /// In fr, this message translates to:
+  /// **'minutes'**
+  String get unitMinutes;
+
+  /// No description provided for @unitHours.
+  ///
+  /// In fr, this message translates to:
+  /// **'heures'**
+  String get unitHours;
+
+  /// No description provided for @unitDays.
+  ///
+  /// In fr, this message translates to:
+  /// **'jours'**
+  String get unitDays;
+
+  /// No description provided for @unitWeeks.
+  ///
+  /// In fr, this message translates to:
+  /// **'semaines'**
+  String get unitWeeks;
+
+  /// No description provided for @daysBefore.
+  ///
+  /// In fr, this message translates to:
+  /// **'Jours avant'**
+  String get daysBefore;
+
+  /// No description provided for @atTime.
+  ///
+  /// In fr, this message translates to:
+  /// **'Heure'**
+  String get atTime;
+
+  /// No description provided for @fullScreenIosNote.
+  ///
+  /// In fr, this message translates to:
+  /// **'Sur iPhone : notification urgente, sans plein écran.'**
+  String get fullScreenIosNote;
+
+  /// No description provided for @alarmIosNote.
+  ///
+  /// In fr, this message translates to:
+  /// **'Sur iPhone : alarme système à partir d\'iOS 26, notification urgente avant.'**
+  String get alarmIosNote;
+
+  /// No description provided for @defaultReminders.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rappels par défaut'**
+  String get defaultReminders;
+
+  /// No description provided for @defaultRemindersTimed.
+  ///
+  /// In fr, this message translates to:
+  /// **'Événements'**
+  String get defaultRemindersTimed;
+
+  /// No description provided for @defaultRemindersAllDay.
+  ///
+  /// In fr, this message translates to:
+  /// **'Événements sur la journée'**
+  String get defaultRemindersAllDay;
+
+  /// No description provided for @noReminders.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun rappel'**
+  String get noReminders;
+
+  /// No description provided for @newPreset.
+  ///
+  /// In fr, this message translates to:
+  /// **'Nouveau preset'**
+  String get newPreset;
+
+  /// No description provided for @editPreset.
+  ///
+  /// In fr, this message translates to:
+  /// **'Modifier le preset'**
+  String get editPreset;
+
+  /// No description provided for @deletePreset.
+  ///
+  /// In fr, this message translates to:
+  /// **'Supprimer le preset'**
+  String get deletePreset;
+
+  /// No description provided for @presetForAllDay.
+  ///
+  /// In fr, this message translates to:
+  /// **'Pour les événements sur la journée'**
+  String get presetForAllDay;
+
+  /// No description provided for @presetsHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Vos presets apparaissent quand vous ajoutez un rappel à un événement.'**
+  String get presetsHint;
+
+  /// No description provided for @alarmSection.
+  ///
+  /// In fr, this message translates to:
+  /// **'Alarme'**
+  String get alarmSection;
+
+  /// No description provided for @alarmSound.
+  ///
+  /// In fr, this message translates to:
+  /// **'Sonnerie'**
+  String get alarmSound;
+
+  /// No description provided for @soundSystem.
+  ///
+  /// In fr, this message translates to:
+  /// **'Sonnerie d\'alarme du téléphone'**
+  String get soundSystem;
+
+  /// No description provided for @soundClassic.
+  ///
+  /// In fr, this message translates to:
+  /// **'Classique'**
+  String get soundClassic;
+
+  /// No description provided for @soundDigital.
+  ///
+  /// In fr, this message translates to:
+  /// **'Numérique'**
+  String get soundDigital;
+
+  /// No description provided for @soundGentle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Douce'**
+  String get soundGentle;
+
+  /// No description provided for @snoozeDuration.
+  ///
+  /// In fr, this message translates to:
+  /// **'Répétition (snooze)'**
+  String get snoozeDuration;
+
+  /// No description provided for @autoStop.
+  ///
+  /// In fr, this message translates to:
+  /// **'Arrêt automatique après'**
+  String get autoStop;
+
+  /// No description provided for @vibration.
+  ///
+  /// In fr, this message translates to:
+  /// **'Vibration'**
+  String get vibration;
+
+  /// No description provided for @permissions.
+  ///
+  /// In fr, this message translates to:
+  /// **'Autorisations'**
+  String get permissions;
+
+  /// No description provided for @permissionNotifications.
+  ///
+  /// In fr, this message translates to:
+  /// **'Notifications'**
+  String get permissionNotifications;
+
+  /// No description provided for @permissionExactAlarms.
+  ///
+  /// In fr, this message translates to:
+  /// **'Alarmes et rappels à l\'heure exacte'**
+  String get permissionExactAlarms;
+
+  /// No description provided for @permissionFullScreen.
+  ///
+  /// In fr, this message translates to:
+  /// **'Notifications plein écran'**
+  String get permissionFullScreen;
+
+  /// No description provided for @permissionAlarmKit.
+  ///
+  /// In fr, this message translates to:
+  /// **'Alarmes (iOS 26 et plus)'**
+  String get permissionAlarmKit;
+
+  /// No description provided for @permissionGranted.
+  ///
+  /// In fr, this message translates to:
+  /// **'Autorisé'**
+  String get permissionGranted;
+
+  /// No description provided for @permissionDenied.
+  ///
+  /// In fr, this message translates to:
+  /// **'Non autorisé'**
+  String get permissionDenied;
+
+  /// No description provided for @permissionUnsupported.
+  ///
+  /// In fr, this message translates to:
+  /// **'Non disponible sur cet appareil'**
+  String get permissionUnsupported;
+
+  /// No description provided for @grant.
+  ///
+  /// In fr, this message translates to:
+  /// **'Autoriser'**
+  String get grant;
+
+  /// No description provided for @testSection.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tester'**
+  String get testSection;
+
+  /// No description provided for @testPush.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tester une notification'**
+  String get testPush;
+
+  /// No description provided for @testFullScreen.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tester le plein écran'**
+  String get testFullScreen;
+
+  /// No description provided for @testAlarm.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tester l\'alarme'**
+  String get testAlarm;
+
+  /// No description provided for @testScheduled.
+  ///
+  /// In fr, this message translates to:
+  /// **'Déclenchement dans 5 secondes. Verrouillez l\'écran pour voir le rendu réel.'**
+  String get testScheduled;
+
+  /// No description provided for @testEventTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Test TimeFix'**
+  String get testEventTitle;
+
+  /// No description provided for @alarmStop.
+  ///
+  /// In fr, this message translates to:
+  /// **'Arrêter'**
+  String get alarmStop;
+
+  /// No description provided for @alarmSnooze.
+  ///
+  /// In fr, this message translates to:
+  /// **'Répéter ({minutes} min)'**
+  String alarmSnooze(int minutes);
+
+  /// No description provided for @alarmDismiss.
+  ///
+  /// In fr, this message translates to:
+  /// **'Fermer'**
+  String get alarmDismiss;
+
+  /// No description provided for @openEvent.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ouvrir l\'événement'**
+  String get openEvent;
+
+  /// No description provided for @channelPush.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rappels'**
+  String get channelPush;
+
+  /// No description provided for @channelPushDescription.
+  ///
+  /// In fr, this message translates to:
+  /// **'Notifications de rappel des événements'**
+  String get channelPushDescription;
+
+  /// No description provided for @channelFullScreen.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rappels plein écran'**
+  String get channelFullScreen;
+
+  /// No description provided for @channelFullScreenDescription.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rappels affichés en plein écran'**
+  String get channelFullScreenDescription;
+
+  /// No description provided for @channelAlarm.
+  ///
+  /// In fr, this message translates to:
+  /// **'Alarmes'**
+  String get channelAlarm;
+
+  /// No description provided for @channelAlarmDescription.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rappels qui sonnent comme un réveil'**
+  String get channelAlarmDescription;
+
+  /// No description provided for @notificationStartsNow.
+  ///
+  /// In fr, this message translates to:
+  /// **'Commence maintenant'**
+  String get notificationStartsNow;
+
+  /// No description provided for @remindersDeviceOnly.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rappels enregistrés sur cet appareil uniquement.'**
+  String get remindersDeviceOnly;
+
+  /// No description provided for @snoozedUntil.
+  ///
+  /// In fr, this message translates to:
+  /// **'Répété à {time}'**
+  String snoozedUntil(String time);
+
+  /// No description provided for @alarmSnoozeShort.
+  ///
+  /// In fr, this message translates to:
+  /// **'Répéter'**
+  String get alarmSnoozeShort;
+
+  /// No description provided for @notificationPermissionHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Autorisez les notifications pour recevoir vos rappels.'**
+  String get notificationPermissionHint;
+
+  /// No description provided for @fullScreenPermissionHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Les rappels plein écran et les alarmes ont besoin d\'une autorisation pour s\'afficher sur l\'écran verrouillé.'**
+  String get fullScreenPermissionHint;
 }
 
 class _AppLocalizationsDelegate

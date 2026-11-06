@@ -506,4 +506,302 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get account => 'Account';
+
+  @override
+  String get reminders => 'Reminders';
+
+  @override
+  String get addReminder => 'Add reminder';
+
+  @override
+  String get reminderTypePush => 'Notification';
+
+  @override
+  String get reminderTypeFullScreen => 'Full screen';
+
+  @override
+  String get reminderTypeAlarm => 'Alarm';
+
+  @override
+  String get reminderAtStart => 'At time of event';
+
+  @override
+  String reminderMinutesBefore(num count) {
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString minutes before',
+      one: '1 minute before',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reminderHoursBefore(num count) {
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString hours before',
+      one: '1 hour before',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reminderDaysBefore(num count) {
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString days before',
+      one: '1 day before',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reminderWeeksBefore(num count) {
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString weeks before',
+      one: '1 week before',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reminderHoursMinutesBefore(int hours, int minutes) {
+    return '$hours h $minutes min before';
+  }
+
+  @override
+  String reminderMinutesAfter(int count) {
+    return '$count min after the start';
+  }
+
+  @override
+  String reminderSameDayAt(String time) {
+    return 'On the day at $time';
+  }
+
+  @override
+  String reminderDayBeforeAt(String time) {
+    return 'The day before at $time';
+  }
+
+  @override
+  String reminderDaysBeforeAt(int count, String time) {
+    return '$count days before at $time';
+  }
+
+  @override
+  String get reminderCustom => 'Custom…';
+
+  @override
+  String get reminderCustomTitle => 'Custom reminder';
+
+  @override
+  String get myPresets => 'My presets';
+
+  @override
+  String get unitMinutes => 'minutes';
+
+  @override
+  String get unitHours => 'hours';
+
+  @override
+  String get unitDays => 'days';
+
+  @override
+  String get unitWeeks => 'weeks';
+
+  @override
+  String get daysBefore => 'Days before';
+
+  @override
+  String get atTime => 'Time';
+
+  @override
+  String get fullScreenIosNote =>
+      'On iPhone: time-sensitive notification, no full screen.';
+
+  @override
+  String get alarmIosNote =>
+      'On iPhone: system alarm on iOS 26 and later, time-sensitive notification before.';
+
+  @override
+  String get defaultReminders => 'Default reminders';
+
+  @override
+  String get defaultRemindersTimed => 'Events';
+
+  @override
+  String get defaultRemindersAllDay => 'All-day events';
+
+  @override
+  String get noReminders => 'No reminders';
+
+  @override
+  String get newPreset => 'New preset';
+
+  @override
+  String get editPreset => 'Edit preset';
+
+  @override
+  String get deletePreset => 'Delete preset';
+
+  @override
+  String get presetForAllDay => 'For all-day events';
+
+  @override
+  String get presetsHint =>
+      'Your presets are offered when you add a reminder to an event.';
+
+  @override
+  String get alarmSection => 'Alarm';
+
+  @override
+  String get alarmSound => 'Sound';
+
+  @override
+  String get soundSystem => 'Phone alarm sound';
+
+  @override
+  String get soundClassic => 'Classic';
+
+  @override
+  String get soundDigital => 'Digital';
+
+  @override
+  String get soundGentle => 'Gentle';
+
+  @override
+  String get snoozeDuration => 'Snooze length';
+
+  @override
+  String get autoStop => 'Stop automatically after';
+
+  @override
+  String get vibration => 'Vibration';
+
+  @override
+  String get permissions => 'Permissions';
+
+  @override
+  String get permissionNotifications => 'Notifications';
+
+  @override
+  String get permissionExactAlarms => 'Exact alarms and reminders';
+
+  @override
+  String get permissionFullScreen => 'Full-screen notifications';
+
+  @override
+  String get permissionAlarmKit => 'Alarms (iOS 26 and later)';
+
+  @override
+  String get permissionGranted => 'Allowed';
+
+  @override
+  String get permissionDenied => 'Not allowed';
+
+  @override
+  String get permissionUnsupported => 'Not available on this device';
+
+  @override
+  String get grant => 'Allow';
+
+  @override
+  String get testSection => 'Test';
+
+  @override
+  String get testPush => 'Test a notification';
+
+  @override
+  String get testFullScreen => 'Test full screen';
+
+  @override
+  String get testAlarm => 'Test the alarm';
+
+  @override
+  String get testScheduled =>
+      'Firing in 5 seconds. Lock the screen to see the real behaviour.';
+
+  @override
+  String get testEventTitle => 'TimeFix test';
+
+  @override
+  String get alarmStop => 'Stop';
+
+  @override
+  String alarmSnooze(int minutes) {
+    return 'Snooze ($minutes min)';
+  }
+
+  @override
+  String get alarmDismiss => 'Dismiss';
+
+  @override
+  String get openEvent => 'Open event';
+
+  @override
+  String get channelPush => 'Reminders';
+
+  @override
+  String get channelPushDescription => 'Event reminder notifications';
+
+  @override
+  String get channelFullScreen => 'Full-screen reminders';
+
+  @override
+  String get channelFullScreenDescription => 'Reminders shown full screen';
+
+  @override
+  String get channelAlarm => 'Alarms';
+
+  @override
+  String get channelAlarmDescription =>
+      'Reminders that ring like an alarm clock';
+
+  @override
+  String get notificationStartsNow => 'Starting now';
+
+  @override
+  String get remindersDeviceOnly => 'Reminders saved on this device only.';
+
+  @override
+  String snoozedUntil(String time) {
+    return 'Snoozed until $time';
+  }
+
+  @override
+  String get alarmSnoozeShort => 'Snooze';
+
+  @override
+  String get notificationPermissionHint =>
+      'Allow notifications to receive your reminders.';
+
+  @override
+  String get fullScreenPermissionHint =>
+      'Full-screen reminders and alarms need a permission to show over the lock screen.';
 }

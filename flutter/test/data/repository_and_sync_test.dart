@@ -12,6 +12,7 @@ import 'package:timefix/data/event_service.dart';
 import 'package:timefix/data/ical/ical_service.dart';
 import 'package:timefix/data/sync/sync_service.dart';
 import 'package:timefix/domain/models.dart';
+import 'package:timefix/domain/reminders.dart';
 import 'package:timefix/state/providers.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 
@@ -77,7 +78,7 @@ void main() {
     expect(occ.map((o) => o.start.day), [2, 3, 5, 6, 7]);
   });
 
-  test('a version 1 database is migrated to version 2', () async {
+  test('a version 1 database is migrated to the current version', () async {
     final path = '${Directory.systemTemp.path}/timefix-v1-${DateTime.now().microsecondsSinceEpoch}.db';
     final v1 = await databaseFactoryFfi.openDatabase(path,
         options: OpenDatabaseOptions(
@@ -109,6 +110,14 @@ void main() {
     await migrated.upsertCalendar((await migrated.getCalendar('c'))!.copyWith(syncToken: 'ctag-1'));
     expect((await migrated.getCalendar('c'))!.syncToken, 'ctag-1');
     expect(await migrated.eventsByHref('c', 'https://x/a.ics'), hasLength(1));
+    // v3: reminders.
+    await migrated.upsertEvent((await migrated.getEvent('old'))!
+        .copyWith(reminders: const [Reminder(10, ReminderType.alarm)]));
+    expect((await migrated.getEvent('old'))!.reminders, const [Reminder(10, ReminderType.alarm)]);
+    await migrated.setLocalReminders('ro|1', const [Reminder(30, ReminderType.push)]);
+    expect(await migrated.localReminders(), {'ro|1': const [Reminder(30, ReminderType.push)]});
+    await migrated.setLocalReminders('ro|1', const []);
+    expect(await migrated.localReminders(), isEmpty);
     await migrated.close();
     await File(path).delete();
   });

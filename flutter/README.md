@@ -12,6 +12,7 @@ Clone de l'application mobile Google Calendar, pour Android et iOS.
 | **Récurrence** | Tous les jours / semaines / mois / ans / jours ouvrables ; affichage des règles RRULE quelconques ; modification ou suppression de « cet événement », « cet événement et les suivants » ou « tous les événements » |
 | **Sources** | Calendriers **locaux** · abonnements **iCal** (`https://`, `webcal://`) en lecture seule · compte **Google** (lecture + écriture) · comptes **CalDAV** (serveur TimeFix auto-hébergé, Nextcloud, Radicale…) en lecture + écriture, création de calendriers |
 | **Synchro** | Au démarrage, au retour au premier plan, et via « Actualiser » |
+| **Rappels** | Trois types : **notification**, **plein écran**, **alarme** (sonne comme un réveil, Arrêter / Répéter). Délais intégrés + **presets perso**, rappels par défaut (événements / journée entière), réglages de l'alarme (sonnerie, répétition, arrêt automatique, vibration) |
 | **Divers** | Français + anglais (selon la langue du téléphone), thème clair / sombre, premier jour de la semaine, durée par défaut |
 
 ## Démarrage
@@ -86,6 +87,45 @@ Pour tester contre un serveur local en HTTP : les builds Android de debug
 autorisent le HTTP en clair (depuis l'émulateur, le PC est `http://10.0.2.2:8080`),
 iOS l'autorise vers les adresses locales. En production, utiliser HTTPS.
 
+## Rappels et alarmes
+
+Chaque événement peut avoir plusieurs rappels. Un rappel = un délai + un type.
+
+| Type | Android | iOS |
+|---|---|---|
+| Notification | Notification (canal « Rappels ») | Notification |
+| Plein écran | Notification plein écran par-dessus l'écran verrouillé, écran TimeFix avec Fermer / Répéter | Notification **urgente** (Time Sensitive, passe les modes Concentration) : Apple n'autorise pas le plein écran |
+| Alarme | Alarme système (`setAlarmClock`) : sonnerie d'alarme en boucle + vibration jusqu'à **Arrêter**, **Répéter** (snooze), arrêt automatique ; écran de sonnerie plein écran | iOS 26+ : vraie alarme **AlarmKit** (comme l'app Horloge) ; avant iOS 26 : notification urgente avec une sonnerie de 28 s |
+
+* **Presets** : délais intégrés (comme Google Agenda) + presets perso créés dans
+  Paramètres → Rappels (nom facultatif, délai, type, journée entière ou non).
+  Les **rappels par défaut** sont ajoutés aux nouveaux événements.
+* **Synchronisation** : calendriers locaux et CalDAV → stockés avec l'événement
+  (CalDAV : `VALARM` standard + `X-TIMEFIX-REMINDER-TYPE`, donc les autres
+  appareils TimeFix sonnent aussi) ; Google → les notifications deviennent des
+  rappels Google, plein écran et alarme restent sur l'appareil ; calendriers en
+  lecture seule (iCal…) → rappels ajoutés depuis la fiche de l'événement,
+  gardés sur l'appareil.
+* **Planification** : les rappels des 3 prochaines semaines sont programmés
+  dans le système (au plus 60 sur iOS, qui n'en garde que 64), et recalculés à
+  chaque ouverture de l'app, retour au premier plan, modification ou synchro.
+* **Autorisations** : demandées à la création du premier rappel ; leur état et
+  des boutons de test sont dans Paramètres → Rappels.
+
+Limites connues :
+
+* iOS : le bouton « Répéter » des alarmes AlarmKit demande une extension
+  Widget (Live Activity) à créer dans Xcode (`dart run alarm_kit:setup`), puis
+  `alarmKitSnoozeEnabled = true` dans `notifications_reminder_platform.dart`.
+  Sans elle, l'alarme iOS 26 propose seulement « Arrêter ».
+* Android 14+ : l'autorisation « notifications plein écran » n'est accordée
+  d'office qu'aux applications d'alarme ou d'appel ; sinon l'utilisateur
+  l'active depuis Paramètres → Rappels (sans elle : notification normale qui
+  sonne quand même en boucle). Publication Play Store : déclarer
+  `USE_EXACT_ALARM` (autorisé pour les agendas) et `USE_FULL_SCREEN_INTENT`.
+* Si l'app n'est pas ouverte pendant plus de 3 semaines, les rappels au-delà
+  ne sont pas programmés.
+
 ## Configurer Google Calendar
 
 1. Dans la [Google Cloud Console](https://console.cloud.google.com/), créer un projet et
@@ -144,4 +184,6 @@ flutter test test/screenshot_test.dart --update-goldens --dart-define=SCREENSHOT
 * Synchronisation Google et iCal côté serveur (multi-comptes Google).
 * Mode hors ligne pour CalDAV (file d'attente des modifications).
 * Vues Jour et 3 jours (la grille de la vue Semaine accepte déjà un nombre de jours).
-* Rappels / notifications, invités, fuseau horaire par événement dans l'éditeur.
+* Invités, fuseau horaire par événement dans l'éditeur.
+* Rappels : rafraîchissement en arrière-plan (WorkManager / BGTaskScheduler) pour ne
+  plus dépendre de l'ouverture de l'app, et snooze AlarmKit (extension Widget).

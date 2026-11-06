@@ -1,5 +1,6 @@
 import '../core/date_utils.dart';
 import '../domain/models.dart';
+import '../domain/reminders.dart';
 
 /// Persistence of sources, calendars and events.
 abstract class CalendarRepository {
@@ -32,6 +33,13 @@ abstract class CalendarRepository {
   /// Events stored in the CalDAV resource [href] (a series and its overrides).
   Future<List<CalendarEvent>> eventsByHref(String calendarId, String href);
 
+  /// Reminders kept on this device only, by event id (all of them when
+  /// [eventIds] is null).
+  Future<Map<String, List<Reminder>>> localReminders([Set<String>? eventIds]);
+
+  /// Replaces the device-only reminders of an event (empty list removes them).
+  Future<void> setLocalReminders(String eventId, List<Reminder> reminders);
+
   /// Events whose title, location or description contains [query].
   Future<List<CalendarEvent>> searchEvents(String query, Set<String> calendarIds,
       {int limit = 200});
@@ -42,6 +50,22 @@ class InMemoryCalendarRepository implements CalendarRepository {
   final Map<String, CalendarSource> _sources = {};
   final Map<String, CalendarInfo> _calendars = {};
   final Map<String, CalendarEvent> _events = {};
+  final Map<String, List<Reminder>> _localReminders = {};
+
+  @override
+  Future<Map<String, List<Reminder>>> localReminders([Set<String>? eventIds]) async => {
+        for (final e in _localReminders.entries)
+          if (eventIds == null || eventIds.contains(e.key)) e.key: e.value,
+      };
+
+  @override
+  Future<void> setLocalReminders(String eventId, List<Reminder> reminders) async {
+    if (reminders.isEmpty) {
+      _localReminders.remove(eventId);
+    } else {
+      _localReminders[eventId] = List.unmodifiable(reminders);
+    }
+  }
 
   @override
   Future<List<CalendarSource>> getSources() async => _sources.values.toList();

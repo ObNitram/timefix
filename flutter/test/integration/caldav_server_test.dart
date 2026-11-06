@@ -17,6 +17,7 @@ import 'package:timefix/data/event_service.dart';
 import 'package:timefix/data/ical/ical_service.dart';
 import 'package:timefix/data/sync/sync_service.dart';
 import 'package:timefix/domain/models.dart';
+import 'package:timefix/domain/reminders.dart';
 import 'package:timefix/state/providers.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
@@ -216,6 +217,46 @@ void main() {
     // The conflict refreshed the local data; nothing was overwritten.
     expect((await occurrences(november)).single.title, 'Version serveur');
     expect((await serverObjects(cal)).single.data, contains('SUMMARY:Version serveur'));
+  }, skip: skip);
+
+  test('reminders are stored as VALARMs and survive a resync', () async {
+    final cal = await connect();
+    await events.create(CalendarEvent(
+      id: events.newEventId(),
+      calendarId: cal.id,
+      title: 'Vol pour Lyon',
+      start: paris(2026, 11, 18, 7),
+      end: paris(2026, 11, 18, 8),
+      reminders: const [
+        Reminder(24 * 60, ReminderType.push),
+        Reminder(120, ReminderType.alarm),
+        Reminder(30, ReminderType.fullScreen),
+      ],
+    ));
+    final data = (await serverObjects(cal)).single.data;
+    expect('BEGIN:VALARM'.allMatches(data), hasLength(3));
+    expect(data, contains('ACTION:AUDIO'));
+    expect(data, contains('X-TIMEFIX-REMINDER-TYPE:ALARM'));
+    expect(data, contains('TRIGGER:-P1D'));
+
+    // Another device downloads the calendar: same reminders.
+    await repo.replaceEvents(cal.id, const []);
+    await sync.syncCalDavCalendar(cal);
+    final back = (await occurrences(november)).single.event;
+    expect(back.reminders, const [
+      Reminder(24 * 60, ReminderType.push),
+      Reminder(120, ReminderType.alarm),
+      Reminder(30, ReminderType.fullScreen),
+    ]);
+
+    // Editing keeps them, removing one updates the server.
+    final occ = (await occurrences(november)).single;
+    await events.update(
+        original: occ,
+        edited: occ.event.copyWith(reminders: const [Reminder(120, ReminderType.alarm)]));
+    final updated = (await serverObjects(cal)).single.data;
+    expect('BEGIN:VALARM'.allMatches(updated), hasLength(1));
+    expect(updated, contains('TRIGGER:-PT2H'));
   }, skip: skip);
 
   test('new calendar created from the app (MKCALENDAR)', () async {

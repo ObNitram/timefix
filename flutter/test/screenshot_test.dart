@@ -95,6 +95,43 @@ void main() {
       await t.pumpAndSettle();
     });
   }, skip: !_enabled);
+  testWidgets('editor_reminders', (t) async {
+    await shoot(t, 'editor_reminders', before: () async {
+      await t.tap(find.byTooltip('Nouvel événement'));
+      await t.pumpAndSettle();
+      await t.enterText(find.byType(TextField).first, 'Vol pour Lyon');
+      await t.ensureVisible(find.text('Ajouter un rappel'));
+      await t.tap(find.text('Ajouter un rappel'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Alarme'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('1 heure avant'));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.text('Ajouter un rappel'));
+      await t.pumpAndSettle();
+    });
+  }, skip: !_enabled);
+  testWidgets('reminder_picker', (t) async {
+    await shoot(t, 'reminder_picker', before: () async {
+      await t.tap(find.byTooltip('Nouvel événement'));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.text('Ajouter un rappel'));
+      await t.tap(find.text('Ajouter un rappel'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Alarme'));
+      await t.pumpAndSettle();
+    });
+  }, skip: !_enabled);
+  testWidgets('reminder_settings', (t) async {
+    await shoot(t, 'reminder_settings', before: () async {
+      await t.tap(find.byTooltip('Ouvrir le menu'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Paramètres'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Rappels'));
+      await t.pumpAndSettle();
+    });
+  }, skip: !_enabled);
   testWidgets('caldav_account', (t) async {
     await shoot(t, 'caldav_account', before: () async {
       await t.tap(find.byTooltip('Ouvrir le menu'));

@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../../core/colors.dart';
 import '../../core/time_zone.dart';
 import '../../domain/models.dart';
+import '../../domain/reminders.dart';
 import 'ics_parser.dart';
 
 class IcalFetchException implements Exception {
@@ -62,7 +63,11 @@ class IcalService {
   /// Converts parsed VEVENTs into events of [calendarId]. Occurrence overrides
   /// (`RECURRENCE-ID`) become standalone events and are excluded from their
   /// series.
-  static List<CalendarEvent> toEvents(IcsCalendar cal, String calendarId) {
+  ///
+  /// [includeReminders] keeps the VALARMs (CalDAV accounts). Alarms of
+  /// read-only subscriptions are ignored, like Google Calendar does.
+  static List<CalendarEvent> toEvents(IcsCalendar cal, String calendarId,
+      {bool includeReminders = false}) {
     final masters = <String, IcsEvent>{};
     final overrides = <IcsEvent>[];
     for (final e in cal.events) {
@@ -90,6 +95,7 @@ class IcalService {
           timeZone: e.timeZone,
           rrule: e.recurrenceId == null ? e.rrule : null,
           recurrenceId: e.recurrenceId,
+          reminders: includeReminders ? e.reminders : const <Reminder>[],
           exdates: [...e.exdates, ...?extraExdates[e.uid]],
           color: e.color == null ? null : _cssColor(e.color!),
           updatedAt: e.lastModified,

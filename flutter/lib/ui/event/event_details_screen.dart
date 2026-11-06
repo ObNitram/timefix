@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/event_service.dart';
+import '../../domain/reminders.dart';
+import '../reminders/reminder_format.dart';
+import '../reminders/reminder_list_editor.dart';
+import '../reminders/reminder_permissions.dart';
 import '../../domain/models.dart';
 import '../../state/providers.dart';
 import '../format.dart';
@@ -74,6 +78,7 @@ class EventDetailsScreen extends ConsumerWidget {
               ],
             ),
           ),
+          _RemindersSection(event: event, editable: editable),
           if (event.location?.isNotEmpty ?? false)
             _Row(
               leading: const Icon(Icons.place_outlined),
@@ -177,6 +182,69 @@ class _Row extends StatelessWidget {
         children: [
           SizedBox(width: 64, child: Center(child: leading)),
           Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+/// Reminders of the event. Events of read-only calendars can get reminders
+/// kept on this device; other events are changed in the editor.
+class _RemindersSection extends ConsumerWidget {
+  const _RemindersSection({required this.event, required this.editable});
+
+  final CalendarEvent event;
+  final bool editable;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final key = localReminderKey(event);
+    final local = ref.watch(localRemindersProvider(key)).value ?? const <Reminder>[];
+    final all = Reminder.normalize([...event.reminders, ...local]);
+    final muted = Theme.of(context).colorScheme.mutedText;
+
+    if (editable) {
+      if (all.isEmpty) return const SizedBox.shrink();
+      return _Row(
+        leading: const Icon(Icons.notifications_outlined),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final r in all)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Icon(reminderTypeIcon(r.type), size: 18, color: muted),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(context.reminderSummary(r, allDay: event.allDay))),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ReminderListEditor(
+            reminders: local,
+            readOnly: event.reminders,
+            allDay: event.allDay,
+            onChanged: (list) async {
+              await ref.read(repositoryProvider).setLocalReminders(key, list);
+              ref.read(dataRevisionProvider.notifier).bump();
+              if (context.mounted) await ensureReminderPermissions(context, ref, list);
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 64, top: 2),
+            child: Text(context.l10n.remindersDeviceOnly, style: TextStyle(fontSize: 12, color: muted)),
+          ),
         ],
       ),
     );

@@ -7,6 +7,8 @@ import 'package:timezone/timezone.dart' as tz;
 
 import 'app.dart';
 import 'data/db/sqlite_calendar_repository.dart';
+import 'data/reminders/notifications_reminder_platform.dart';
+import 'state/reminder_providers.dart';
 import 'state/providers.dart';
 import 'state/settings.dart';
 
@@ -28,6 +30,7 @@ Future<void> main() async {
     overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       repositoryProvider.overrideWithValue(repository),
+      reminderPlatformProvider.overrideWithValue(NotificationsReminderPlatform()),
     ],
     child: const TimefixApp(),
   ));

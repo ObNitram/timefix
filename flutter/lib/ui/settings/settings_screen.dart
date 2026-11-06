@@ -8,6 +8,7 @@ import '../../state/providers.dart';
 import '../../state/settings.dart';
 import '../calendars/add_calendar_screen.dart';
 import '../format.dart';
+import 'reminder_settings_screen.dart';
 import 'source_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -90,6 +91,13 @@ class SettingsScreen extends ConsumerWidget {
                   settings.defaultDurationMinutes, l10n.minutes);
               if (v != null) notifier.setDefaultDuration(v);
             },
+          ),
+          ListTile(
+            leading: const Icon(Icons.notifications_outlined),
+            title: Text(l10n.reminders),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context)
+                .push(MaterialPageRoute<void>(builder: (_) => const ReminderSettingsScreen())),
           ),
           const Divider(),
           _Header(l10n.manageCalendars),

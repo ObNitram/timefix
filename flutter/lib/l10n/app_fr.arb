@@ -285,5 +285,167 @@
   "passwordUpdated": "Mot de passe mis à jour",
   "conflictError": "Cet événement a été modifié ailleurs. Les données ont été actualisées : réessayez.",
   "caldavHelp": "Pour un serveur TimeFix, utilisez l'adresse du serveur (ex. https://cal.exemple.fr) et le compte créé par l'administrateur.",
-  "account": "Compte"
+  "account": "Compte",
+  "reminders": "Rappels",
+  "addReminder": "Ajouter un rappel",
+  "reminderTypePush": "Notification",
+  "reminderTypeFullScreen": "Plein écran",
+  "reminderTypeAlarm": "Alarme",
+  "reminderAtStart": "Au moment de l'événement",
+  "reminderMinutesBefore": "{count, plural, =1{1 minute avant} other{{count} minutes avant}}",
+  "@reminderMinutesBefore": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "reminderHoursBefore": "{count, plural, =1{1 heure avant} other{{count} heures avant}}",
+  "@reminderHoursBefore": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "reminderDaysBefore": "{count, plural, =1{1 jour avant} other{{count} jours avant}}",
+  "@reminderDaysBefore": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "reminderWeeksBefore": "{count, plural, =1{1 semaine avant} other{{count} semaines avant}}",
+  "@reminderWeeksBefore": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "reminderHoursMinutesBefore": "{hours} h {minutes} min avant",
+  "@reminderHoursMinutesBefore": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderMinutesAfter": "{count} min après le début",
+  "@reminderMinutesAfter": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderSameDayAt": "Le jour même à {time}",
+  "@reminderSameDayAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderDayBeforeAt": "La veille à {time}",
+  "@reminderDayBeforeAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderDaysBeforeAt": "{count} jours avant à {time}",
+  "@reminderDaysBeforeAt": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderCustom": "Personnalisé…",
+  "reminderCustomTitle": "Rappel personnalisé",
+  "myPresets": "Mes presets",
+  "unitMinutes": "minutes",
+  "unitHours": "heures",
+  "unitDays": "jours",
+  "unitWeeks": "semaines",
+  "daysBefore": "Jours avant",
+  "atTime": "Heure",
+  "fullScreenIosNote": "Sur iPhone : notification urgente, sans plein écran.",
+  "alarmIosNote": "Sur iPhone : alarme système à partir d'iOS 26, notification urgente avant.",
+  "defaultReminders": "Rappels par défaut",
+  "defaultRemindersTimed": "Événements",
+  "defaultRemindersAllDay": "Événements sur la journée",
+  "noReminders": "Aucun rappel",
+  "newPreset": "Nouveau preset",
+  "editPreset": "Modifier le preset",
+  "deletePreset": "Supprimer le preset",
+  "presetForAllDay": "Pour les événements sur la journée",
+  "presetsHint": "Vos presets apparaissent quand vous ajoutez un rappel à un événement.",
+  "alarmSection": "Alarme",
+  "alarmSound": "Sonnerie",
+  "soundSystem": "Sonnerie d'alarme du téléphone",
+  "soundClassic": "Classique",
+  "soundDigital": "Numérique",
+  "soundGentle": "Douce",
+  "snoozeDuration": "Répétition (snooze)",
+  "autoStop": "Arrêt automatique après",
+  "vibration": "Vibration",
+  "permissions": "Autorisations",
+  "permissionNotifications": "Notifications",
+  "permissionExactAlarms": "Alarmes et rappels à l'heure exacte",
+  "permissionFullScreen": "Notifications plein écran",
+  "permissionAlarmKit": "Alarmes (iOS 26 et plus)",
+  "permissionGranted": "Autorisé",
+  "permissionDenied": "Non autorisé",
+  "permissionUnsupported": "Non disponible sur cet appareil",
+  "grant": "Autoriser",
+  "testSection": "Tester",
+  "testPush": "Tester une notification",
+  "testFullScreen": "Tester le plein écran",
+  "testAlarm": "Tester l'alarme",
+  "testScheduled": "Déclenchement dans 5 secondes. Verrouillez l'écran pour voir le rendu réel.",
+  "testEventTitle": "Test TimeFix",
+  "alarmStop": "Arrêter",
+  "alarmSnooze": "Répéter ({minutes} min)",
+  "@alarmSnooze": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "alarmDismiss": "Fermer",
+  "openEvent": "Ouvrir l'événement",
+  "channelPush": "Rappels",
+  "channelPushDescription": "Notifications de rappel des événements",
+  "channelFullScreen": "Rappels plein écran",
+  "channelFullScreenDescription": "Rappels affichés en plein écran",
+  "channelAlarm": "Alarmes",
+  "channelAlarmDescription": "Rappels qui sonnent comme un réveil",
+  "notificationStartsNow": "Commence maintenant",
+  "remindersDeviceOnly": "Rappels enregistrés sur cet appareil uniquement.",
+  "snoozedUntil": "Répété à {time}",
+  "@snoozedUntil": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "alarmSnoozeShort": "Répéter",
+  "notificationPermissionHint": "Autorisez les notifications pour recevoir vos rappels.",
+  "fullScreenPermissionHint": "Les rappels plein écran et les alarmes ont besoin d'une autorisation pour s'afficher sur l'écran verrouillé."
 }

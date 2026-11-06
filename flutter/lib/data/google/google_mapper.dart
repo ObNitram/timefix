@@ -3,14 +3,28 @@ import 'package:googleapis/calendar/v3.dart' as gcal;
 import '../../core/colors.dart';
 import '../../core/time_zone.dart';
 import '../../domain/models.dart';
+import '../../domain/reminders.dart';
 
 /// Conversions between Google Calendar API objects and app models.
 class GoogleMapper {
   static String eventId(String calendarId, String remoteId) =>
       '$calendarId|$remoteId';
 
+  /// Google only stores "popup" reminders in minutes before the start, at
+  /// most 5 per event, up to 4 weeks.
+  static bool isGoogleReminder(Reminder r) =>
+      r.type == ReminderType.push && r.minutesBefore >= 0 && r.minutesBefore <= maxReminderMinutes;
+
+  static List<Reminder> remindersFrom(List<gcal.EventReminder>? reminders) => Reminder.normalize([
+        for (final r in reminders ?? const <gcal.EventReminder>[])
+          if (r.method == 'popup' && r.minutes != null) Reminder(r.minutes!, ReminderType.push),
+      ]);
+
   /// Returns null for cancelled events or events without dates.
-  static CalendarEvent? fromGoogle(gcal.Event e, String calendarId) {
+  /// [calendarDefaults] are the calendar's default reminders, used when the
+  /// event says `useDefault`.
+  static CalendarEvent? fromGoogle(gcal.Event e, String calendarId,
+      {List<Reminder> calendarDefaults = const []}) {
     if (e.status == 'cancelled' || e.id == null) return null;
     final s = e.start, en = e.end;
     if (s == null) return null;
@@ -47,6 +61,9 @@ class GoogleMapper {
       // are never stored. The rule is kept only when present.
       rrule: rrule,
       color: colorForGoogleEventColorId(e.colorId),
+      reminders: (e.reminders?.useDefault ?? false)
+          ? calendarDefaults
+          : remindersFrom(e.reminders?.overrides),
       updatedAt: e.updated?.toLocal(),
     );
   }
@@ -70,6 +87,13 @@ class GoogleMapper {
     if (includeRecurrence && e.isRecurring) {
       event.recurrence = ['RRULE:${e.rrule}'];
     }
+    event.reminders = gcal.EventReminders(
+      useDefault: false,
+      overrides: [
+        for (final r in e.reminders.where(isGoogleReminder).take(5))
+          gcal.EventReminder(method: 'popup', minutes: r.minutesBefore),
+      ],
+    );
     return event;
   }
 }

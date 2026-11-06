@@ -71,14 +71,29 @@ class _ScheduleViewState extends ConsumerState<ScheduleView> {
     Scrollable.ensureVisible(ctx, alignment: 0);
   }
 
+  bool _focusUpdateScheduled = false;
+
   bool _onScroll(ScrollNotification n) {
     if (n.depth != 0) return false;
+    // Positions are only up to date after the next layout (notifications
+    // are sent from jumpTo, before the viewport is laid out again).
+    if (!_focusUpdateScheduled) {
+      _focusUpdateScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _focusUpdateScheduled = false;
+        _updateFocusedDate();
+      });
+    }
+    return false;
+  }
+
+  void _updateFocusedDate() {
+    if (!mounted) return;
     final viewBox = _scrollViewKey.currentContext?.findRenderObject() as RenderBox?;
-    if (viewBox == null || !viewBox.attached) return false;
+    if (viewBox == null || !viewBox.attached) return;
     final top = viewBox.localToGlobal(Offset.zero).dy;
     final date = _marks.dateAt(top + 4);
     if (date != null) ref.read(focusedDateProvider.notifier).set(date);
-    return false;
   }
 
   @override

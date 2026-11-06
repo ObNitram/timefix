@@ -4,7 +4,11 @@ import 'package:timefix/state/settings.dart';
 import 'package:timefix/ui/views/month/month_view.dart';
 import 'package:timefix/ui/views/week/week_view.dart';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:timefix/core/date_utils.dart';
+import 'package:timefix/state/providers.dart';
+import 'package:timefix/ui/home/home_screen.dart';
 import 'package:timefix/domain/models.dart';
 import 'package:timefix/ui/home/mini_month.dart';
 
@@ -37,6 +41,11 @@ void main() {
     expect(find.text('Réunion d\'équipe'), findsOneWidget);
     expect(find.text('Déjeuner avec Paul'), findsOneWidget);
     expect(find.text('Course à pied'), findsWidgets);
+
+    // The schedule scrolled to today, and the focused date follows it (it
+    // used to be computed from stale positions, giving the week's Monday).
+    final container = ProviderScope.containerOf(tester.element(find.byType(HomeScreen)));
+    expect(container.read(focusedDateProvider), dateOnly(DateTime.now()));
   });
 
   testWidgets('drawer switches between the three views', (tester) async {

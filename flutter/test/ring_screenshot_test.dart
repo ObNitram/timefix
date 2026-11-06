@@ -51,5 +51,7 @@ void main() {
     ));
     await tester.pump(const Duration(milliseconds: 450));
     await expectLater(find.byType(MaterialApp), matchesGoldenFile('../build/screenshots/ring.png'));
+    // Dispose the screen's timers.
+    await tester.pumpWidget(const SizedBox());
   }, skip: !_enabled);
 }

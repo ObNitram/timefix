@@ -78,10 +78,12 @@ class _ReminderPickerState extends ConsumerState<_ReminderPicker> {
             showSelectedIcon: false,
             segments: [
               for (final t in ReminderType.values)
+                // Labels only: with icons "Notification" does not fit on
+                // phones (the list below shows the type's icon).
                 ButtonSegment(
                   value: t,
-                  icon: Icon(reminderTypeIcon(t)),
-                  label: Text(reminderTypeLabel(l10n, t), overflow: TextOverflow.ellipsis),
+                  label: Text(reminderTypeLabel(l10n, t),
+                      maxLines: 1, softWrap: false, overflow: TextOverflow.fade),
                 ),
             ],
             selected: {_type},

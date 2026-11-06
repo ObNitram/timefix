@@ -76,10 +76,13 @@ class ReminderSettingsScreen extends ConsumerWidget {
             ListTile(
               leading: Icon(reminderTypeIcon(p.reminder.type)),
               title: Text(context.presetLabel(p)),
-              subtitle: Text([
+              subtitle: switch ([
                 if (p.name?.trim().isNotEmpty ?? false) context.reminderSummary(p.reminder, allDay: p.allDay),
                 if (p.allDay) l10n.defaultRemindersAllDay,
-              ].join(' · ')),
+              ]) {
+                final parts when parts.isNotEmpty => Text(parts.join(' · ')),
+                _ => null,
+              },
               trailing: IconButton(
                 tooltip: l10n.deletePreset,
                 icon: const Icon(Icons.delete_outline),

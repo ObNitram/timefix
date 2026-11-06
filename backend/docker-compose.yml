@@ -1,0 +1,39 @@
+# TimeFix CalDAV server with PostgreSQL.
+#   cp .env.example .env   # then edit the passwords
+#   docker compose up -d
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: timefix
+      POSTGRES_USER: timefix
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U timefix -d timefix"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build: .
+    image: timefix-server
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      Database__Provider: Postgres
+      Database__ConnectionString: "Host=db;Database=timefix;Username=timefix;Password=${POSTGRES_PASSWORD}"
+      Admin__Username: ${TIMEFIX_ADMIN_USERNAME:-admin}
+      Admin__Password: ${TIMEFIX_ADMIN_PASSWORD:?Set TIMEFIX_ADMIN_PASSWORD in .env}
+      DefaultCalendarName: ${TIMEFIX_DEFAULT_CALENDAR_NAME:-Personnel}
+      # true when a reverse proxy (HTTPS) is the only way to reach the server.
+      ReverseProxy__Enabled: ${TIMEFIX_BEHIND_PROXY:-false}
+    ports:
+      - "${TIMEFIX_PORT:-8080}:8080"
+
+volumes:
+  postgres-data:

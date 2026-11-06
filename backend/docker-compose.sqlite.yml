@@ -1,0 +1,22 @@
+# TimeFix CalDAV server with SQLite (single container, data in a volume).
+#   docker compose -f docker-compose.sqlite.yml up -d
+services:
+  server:
+    build: .
+    image: timefix-server
+    restart: unless-stopped
+    environment:
+      Database__Provider: Sqlite
+      Database__ConnectionString: "Data Source=/data/timefix.db"
+      Admin__Username: ${TIMEFIX_ADMIN_USERNAME:-admin}
+      Admin__Password: ${TIMEFIX_ADMIN_PASSWORD:?Set TIMEFIX_ADMIN_PASSWORD in .env}
+      DefaultCalendarName: ${TIMEFIX_DEFAULT_CALENDAR_NAME:-Personnel}
+      # true when a reverse proxy (HTTPS) is the only way to reach the server.
+      ReverseProxy__Enabled: ${TIMEFIX_BEHIND_PROXY:-false}
+    volumes:
+      - timefix-data:/data
+    ports:
+      - "${TIMEFIX_PORT:-8080}:8080"
+
+volumes:
+  timefix-data:

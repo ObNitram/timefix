@@ -1,0 +1,521 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/colors.dart';
+import '../../core/date_utils.dart';
+import '../../data/event_service.dart';
+import '../../domain/models.dart';
+import '../../domain/recurrence.dart';
+import '../../state/providers.dart';
+import '../../state/settings.dart';
+import '../format.dart';
+import '../theme.dart';
+import '../widgets/common.dart';
+import 'event_details_screen.dart' show describeRruleSafe;
+import 'scope_dialog.dart';
+
+/// Full screen editor to create an event or edit [occurrence].
+class EventEditorScreen extends ConsumerStatefulWidget {
+  const EventEditorScreen({
+    super.key,
+    this.occurrence,
+    this.initialStart,
+    this.initialAllDay = false,
+  });
+
+  final EventOccurrence? occurrence;
+  final DateTime? initialStart;
+  final bool initialAllDay;
+
+  @override
+  ConsumerState<EventEditorScreen> createState() => _EventEditorScreenState();
+}
+
+class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
+  final _title = TextEditingController();
+  final _location = TextEditingController();
+  final _description = TextEditingController();
+
+  late bool _allDay;
+
+  /// Start and end. For all-day events [_end] is the last day (inclusive).
+  late DateTime _start;
+  late DateTime _end;
+  String? _rrule;
+  String? _calendarId;
+  Color? _color;
+  bool _dirty = false;
+  bool _saving = false;
+
+  bool get _isNew => widget.occurrence == null;
+  CalendarEvent? get _original => widget.occurrence?.event;
+
+  /// Google instances of a series can only be edited one at a time.
+  bool get _isSeriesInstance => _original?.recurringRemoteId != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final o = widget.occurrence;
+    if (o != null) {
+      final e = o.event;
+      _title.text = e.title;
+      _location.text = e.location ?? '';
+      _description.text = e.description ?? '';
+      _allDay = e.allDay;
+      _start = o.start;
+      _end = e.allDay ? addDays(o.end, -1) : o.end;
+      if (_end.isBefore(_start)) _end = _start;
+      _rrule = e.rrule;
+      _calendarId = e.calendarId;
+      _color = e.color;
+    } else {
+      final now = DateTime.now();
+      _allDay = widget.initialAllDay;
+      _start = widget.initialStart ?? DateTime(now.year, now.month, now.day, now.hour + 1);
+      final minutes = ref.read(settingsProvider).defaultDurationMinutes;
+      _end = _allDay ? _start : _start.add(Duration(minutes: minutes));
+    }
+    for (final c in [_title, _location, _description]) {
+      c.addListener(_markDirty);
+    }
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _location.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  void _markDirty() => _dirty = true;
+
+  void _update(VoidCallback fn) => setState(() {
+        fn();
+        _dirty = true;
+      });
+
+  Future<void> _pickDate({required bool isStart}) async {
+    final current = isStart ? _start : _end;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime(1970),
+      lastDate: DateTime(2200),
+    );
+    if (picked == null) return;
+    _update(() {
+      if (isStart) {
+        final duration = _end.difference(_start);
+        _start = DateTime(picked.year, picked.month, picked.day, _start.hour, _start.minute);
+        _end = _start.add(duration);
+      } else {
+        _end = DateTime(picked.year, picked.month, picked.day, _end.hour, _end.minute);
+        if (_end.isBefore(_start)) {
+          _start = DateTime(picked.year, picked.month, picked.day, _start.hour, _start.minute);
+          if (_end.isBefore(_start)) _end = _start;
+        }
+      }
+    });
+  }
+
+  Future<void> _pickTime({required bool isStart}) async {
+    final current = isStart ? _start : _end;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(current),
+    );
+    if (picked == null) return;
+    _update(() {
+      if (isStart) {
+        final duration = _end.difference(_start);
+        _start = DateTime(_start.year, _start.month, _start.day, picked.hour, picked.minute);
+        _end = _start.add(duration);
+      } else {
+        _end = DateTime(_end.year, _end.month, _end.day, picked.hour, picked.minute);
+        if (_end.isBefore(_start)) {
+          final minutes = ref.read(settingsProvider).defaultDurationMinutes;
+          _end = _start.add(Duration(minutes: minutes));
+        }
+      }
+    });
+  }
+
+  void _toggleAllDay(bool value) {
+    _update(() {
+      _allDay = value;
+      if (!value) {
+        final now = DateTime.now();
+        _start = DateTime(_start.year, _start.month, _start.day,
+            isSameDay(_start, now) ? (now.hour + 1).clamp(0, 23) : 9);
+        final minutes = ref.read(settingsProvider).defaultDurationMinutes;
+        final end = _start.add(Duration(minutes: minutes));
+        _end = isSameDay(_end, _start)
+            ? end
+            : DateTime(_end.year, _end.month, _end.day, end.hour, end.minute);
+      }
+    });
+  }
+
+  Future<void> _pickRecurrence() async {
+    final current = presetForRrule(_rrule);
+    final presets = [
+      RecurrencePreset.none,
+      RecurrencePreset.daily,
+      RecurrencePreset.weekly,
+      RecurrencePreset.monthly,
+      RecurrencePreset.yearly,
+      RecurrencePreset.weekdays,
+      if (current == RecurrencePreset.custom) RecurrencePreset.custom,
+    ];
+    final picked = await showDialog<RecurrencePreset>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(context.l10n.repeat),
+        children: [
+          for (final p in presets)
+            ListTile(
+              leading: Icon(p == current ? Icons.radio_button_checked : Icons.radio_button_off,
+                  color: p == current ? Theme.of(context).colorScheme.primary : null),
+              title: Text(p == RecurrencePreset.custom
+                  ? describeRrule(context, _rrule!, _start)
+                  : recurrencePresetLabel(context, p, _start)),
+              onTap: () => Navigator.pop(context, p),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || picked == RecurrencePreset.custom || picked == current) return;
+    _update(() => _rrule = rruleForPreset(picked, _start));
+  }
+
+  Future<void> _pickCalendar(List<CalendarInfo> calendars) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final c in calendars)
+              ListTile(
+                leading: CircleAvatar(radius: 8, backgroundColor: c.color),
+                title: Text(c.name),
+                trailing: c.id == _calendarId ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.pop(context, c.id),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked != null) _update(() => _calendarId = picked);
+  }
+
+  Future<void> _pickColor(Color calendarColor) async {
+    final result = await showColorPickerSheet(context,
+        selected: _color, allowDefault: true, defaultColor: calendarColor);
+    if (result != null) _update(() => _color = result.color);
+  }
+
+  CalendarEvent _buildEvent(String calendarId) {
+    final start = _allDay ? dateOnly(_start) : _start;
+    final end = _allDay ? addDays(dateOnly(_end), 1) : _end;
+    final base = _original ??
+        CalendarEvent(
+          id: ref.read(eventServiceProvider).newEventId(),
+          calendarId: calendarId,
+          title: '',
+          start: start,
+          end: end,
+        );
+    return CalendarEvent(
+      id: base.id,
+      calendarId: calendarId,
+      title: _title.text.trim(),
+      start: start,
+      end: end,
+      allDay: _allDay,
+      description: _description.text.trim().isEmpty ? null : _description.text.trim(),
+      location: _location.text.trim().isEmpty ? null : _location.text.trim(),
+      timeZone: base.timeZone,
+      rrule: _isSeriesInstance ? null : _rrule,
+      exdates: base.exdates,
+      color: _color,
+      remoteId: base.remoteId,
+      recurringRemoteId: base.recurringRemoteId,
+    );
+  }
+
+  Future<void> _save(String calendarId) async {
+    final l10n = context.l10n;
+    final edited = _buildEvent(calendarId);
+    final service = ref.read(eventServiceProvider);
+    var scope = RecurrenceScope.all;
+    final original = _original;
+    if (original != null && original.isRecurring) {
+      final ruleChanged = edited.rrule != original.rrule;
+      final s = await askRecurrenceScope(
+        context,
+        title: l10n.editRecurringTitle,
+        confirmLabel: l10n.ok,
+        options: ruleChanged
+            ? const [RecurrenceScope.thisAndFollowing, RecurrenceScope.all]
+            : RecurrenceScope.values,
+      );
+      if (s == null) return;
+      scope = s;
+    }
+    if (!mounted) return;
+    setState(() => _saving = true);
+    final ok = await runGuarded(context, () async {
+      if (original == null) {
+        await service.create(edited);
+      } else {
+        await service.update(original: widget.occurrence!, edited: edited, scope: scope);
+      }
+      ref.read(dataRevisionProvider.notifier).bump();
+    });
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (ok) {
+      _dirty = false;
+      Navigator.of(context).pop(true);
+    }
+  }
+
+  Future<void> _confirmDiscard() async {
+    final l10n = context.l10n;
+    final discard = await confirmDialog(context,
+        title: l10n.discardChangesTitle, confirmLabel: l10n.discard);
+    if (discard && mounted) {
+      _dirty = false;
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final scheme = Theme.of(context).colorScheme;
+    final writable = ref.watch(writableCalendarsProvider);
+    final calendarsById = ref.watch(calendarsByIdProvider);
+    _calendarId ??= writable.isEmpty ? null : writable.first.id;
+    final calendar = _calendarId == null ? null : calendarsById[_calendarId];
+
+    // Google series instances can only move inside their own calendar.
+    final calendarChoices = _isSeriesInstance
+        ? writable.where((c) => c.id == _original!.calendarId).toList()
+        : writable;
+
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmDiscard();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: l10n.close,
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.maybePop(context),
+          ),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: FilledButton(
+                onPressed: calendar == null || _saving ? null : () => _save(calendar.id),
+                child: _saving
+                    ? const SizedBox(
+                        width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Text(l10n.save),
+              ),
+            ),
+          ],
+        ),
+        body: calendar == null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Text(l10n.noWritableCalendar, textAlign: TextAlign.center),
+                ),
+              )
+            : ListView(
+                padding: const EdgeInsets.only(bottom: 32),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(64, 8, 16, 8),
+                    child: TextField(
+                      controller: _title,
+                      autofocus: _isNew,
+                      textCapitalization: TextCapitalization.sentences,
+                      style: const TextStyle(fontSize: 24),
+                      decoration: InputDecoration(
+                        hintText: l10n.addTitle,
+                        border: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                  const Divider(),
+                  _EditorRow(
+                    icon: Icons.schedule,
+                    child: Row(
+                      children: [
+                        Expanded(child: Text(l10n.allDay, style: const TextStyle(fontSize: 16))),
+                        Switch(value: _allDay, onChanged: _toggleAllDay),
+                      ],
+                    ),
+                  ),
+                  _DateTimeRow(
+                    date: formatShortDate(context, _start),
+                    time: _allDay ? null : formatTime(context, _start),
+                    onDate: () => _pickDate(isStart: true),
+                    onTime: () => _pickTime(isStart: true),
+                  ),
+                  _DateTimeRow(
+                    date: formatShortDate(context, _end),
+                    time: _allDay ? null : formatTime(context, _end),
+                    onDate: () => _pickDate(isStart: false),
+                    onTime: () => _pickTime(isStart: false),
+                  ),
+                  _EditorRow(
+                    icon: Icons.repeat,
+                    onTap: _isSeriesInstance ? null : _pickRecurrence,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _rrule == null
+                              ? l10n.repeatNone
+                              : describeRruleSafe(
+                                  context, _buildEvent(calendar.id).copyWith(start: _start)),
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        if (_isSeriesInstance)
+                          Text(l10n.seriesInstanceNote,
+                              style: TextStyle(fontSize: 12, color: scheme.mutedText)),
+                      ],
+                    ),
+                  ),
+                  const Divider(),
+                  _EditorRow(
+                    icon: Icons.calendar_today_outlined,
+                    onTap: calendarChoices.length > 1 ? () => _pickCalendar(calendarChoices) : null,
+                    child: Row(
+                      children: [
+                        CircleAvatar(radius: 6, backgroundColor: calendar.color),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(calendar.name, style: const TextStyle(fontSize: 16))),
+                      ],
+                    ),
+                  ),
+                  _EditorRow(
+                    icon: Icons.palette_outlined,
+                    onTap: () => _pickColor(calendar.color),
+                    child: Row(
+                      children: [
+                        CircleAvatar(radius: 6, backgroundColor: _color ?? calendar.color),
+                        const SizedBox(width: 12),
+                        Text(
+                          _color == null
+                              ? l10n.defaultColor
+                              : colorName(context,
+                                  calendarPalette.firstWhere((p) => p.color == _color,
+                                      orElse: () => calendarPalette.last)),
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(),
+                  _EditorRow(
+                    icon: Icons.place_outlined,
+                    child: TextField(
+                      controller: _location,
+                      decoration: InputDecoration(
+                          hintText: l10n.addLocation, border: InputBorder.none),
+                    ),
+                  ),
+                  const Divider(),
+                  _EditorRow(
+                    icon: Icons.notes,
+                    child: TextField(
+                      controller: _description,
+                      minLines: 1,
+                      maxLines: 8,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: InputDecoration(
+                          hintText: l10n.addDescription, border: InputBorder.none),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _EditorRow extends StatelessWidget {
+  const _EditorRow({required this.icon, required this.child, this.onTap});
+
+  final IconData icon;
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 64,
+              child: Icon(icon, color: Theme.of(context).colorScheme.mutedText),
+            ),
+            Expanded(child: child),
+            const SizedBox(width: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DateTimeRow extends StatelessWidget {
+  const _DateTimeRow({required this.date, required this.time, required this.onDate, required this.onTime});
+
+  final String date;
+  final String? time;
+  final VoidCallback onDate;
+  final VoidCallback onTime;
+
+  @override
+  Widget build(BuildContext context) {
+    const style = TextStyle(fontSize: 16);
+    return Padding(
+      padding: const EdgeInsets.only(left: 52, right: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextButton(
+              style: TextButton.styleFrom(
+                alignment: Alignment.centerLeft,
+                foregroundColor: Theme.of(context).colorScheme.onSurface,
+              ),
+              onPressed: onDate,
+              child: Text(date, style: style),
+            ),
+          ),
+          if (time != null)
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.onSurface),
+              onPressed: onTime,
+              child: Text(time!, style: style),
+            ),
+        ],
+      ),
+    );
+  }
+}

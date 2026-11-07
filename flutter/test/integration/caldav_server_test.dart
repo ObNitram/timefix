@@ -259,6 +259,41 @@ void main() {
     expect(updated, contains('TRIGGER:-PT2H'));
   }, skip: skip);
 
+  test('series reminders reach moved occurrences; foreign alarms survive edits', () async {
+    final cal = await connect();
+    final href = Uri.parse(cal.remoteId!).resolve('foreign.ics');
+    // Written by another client: weekly series, one moved occurrence with the
+    // series' alarm, plus an e-mail alarm TimeFix cannot represent.
+    await server().put(
+        href,
+        'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Other//EN\r\n'
+        'BEGIN:VEVENT\r\nUID:f1\r\nDTSTAMP:20261101T000000Z\r\nDTSTART:20261102T080000Z\r\n'
+        'DTEND:20261102T090000Z\r\nRRULE:FREQ=WEEKLY;COUNT=4\r\nSUMMARY:Cours\r\n'
+        'BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT10M\r\nDESCRIPTION:Cours\r\nEND:VALARM\r\n'
+        'BEGIN:VALARM\r\nACTION:EMAIL\r\nTRIGGER:-P1D\r\nSUMMARY:Cours\r\nDESCRIPTION:Cours\r\n'
+        'ATTENDEE:mailto:moi@example.com\r\nEND:VALARM\r\nEND:VEVENT\r\n'
+        'BEGIN:VEVENT\r\nUID:f1\r\nDTSTAMP:20261101T000000Z\r\nRECURRENCE-ID:20261109T080000Z\r\n'
+        'DTSTART:20261110T080000Z\r\nDTEND:20261110T090000Z\r\nSUMMARY:Cours (déplacé)\r\n'
+        'BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT10M\r\nDESCRIPTION:Cours\r\nEND:VALARM\r\n'
+        'END:VEVENT\r\nEND:VCALENDAR\r\n',
+        create: true);
+    await sync.syncCalDavCalendar(cal);
+    final occ = (await occurrences(november)).firstWhere((o) => o.title == 'Cours');
+    await events.update(
+      original: occ,
+      edited: occ.event.copyWith(reminders: const [Reminder(30, ReminderType.alarm)]),
+      scope: RecurrenceScope.all,
+    );
+    final data = (await serverObjects(cal)).firstWhere((o) => o.data.contains('UID:f1')).data;
+    expect(data, contains('ACTION:EMAIL'));
+    expect(data, contains('ATTENDEE:mailto:moi@example.com'));
+    expect('X-TIMEFIX-REMINDER-TYPE:ALARM'.allMatches(data), hasLength(2), reason: 'series and moved occurrence');
+    expect(data, isNot(contains('TRIGGER:-PT10M')));
+    await sync.syncCalDavCalendar(cal);
+    final moved = (await occurrences(november)).firstWhere((o) => o.title == 'Cours (déplacé)');
+    expect(moved.event.reminders, const [Reminder(30, ReminderType.alarm)]);
+  }, skip: skip);
+
   test('new calendar created from the app (MKCALENDAR)', () async {
     await connect();
     final source = (await repo.getSources()).single;

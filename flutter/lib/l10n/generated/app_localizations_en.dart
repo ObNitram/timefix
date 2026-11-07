@@ -804,4 +804,8 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get fullScreenPermissionHint =>
       'Full-screen reminders and alarms need a permission to show over the lock screen.';
+
+  @override
+  String get remindersSentinel =>
+      'Open TimeFix to schedule your next reminders.';
 }

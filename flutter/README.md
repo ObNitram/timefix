@@ -123,8 +123,16 @@ Limites connues :
   l'active depuis Paramètres → Rappels (sans elle : notification normale qui
   sonne quand même en boucle). Publication Play Store : déclarer
   `USE_EXACT_ALARM` (autorisé pour les agendas) et `USE_FULL_SCREEN_INTENT`.
-* Si l'app n'est pas ouverte pendant plus de 3 semaines, les rappels au-delà
-  ne sont pas programmés.
+* Les rappels sont programmés sur 5 semaines (Android) / 3 semaines et 60
+  alertes (iOS), et recalculés à chaque ouverture de l'app. S'il reste des
+  rappels non programmés, une notification « Ouvrez TimeFix pour programmer vos
+  prochains rappels » est placée après la dernière alerte.
+* Android : après un redémarrage, les alarmes sont reprogrammées au premier
+  déverrouillage (pas de démarrage direct) ; une alarme due avant ce
+  déverrouillage sonne à ce moment-là.
+* Android 8.0 minimum (canaux de notification).
+* iOS : le texte de la demande d'autorisation AlarmKit est bilingue FR / EN
+  (pas encore de fichiers `InfoPlist.strings`).
 
 ## Configurer Google Calendar
 

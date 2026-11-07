@@ -14,15 +14,18 @@ import 'package:timezone/data/latest_all.dart' as tzdata;
 class RecordingPlatform extends FakeReminderPlatform {
   final List<int> scheduleCalls = [];
   final List<int> cancelCalls = [];
+  Duration delay = Duration.zero;
 
   @override
   Future<void> schedule(ReminderAlert alert, AlarmOptions options) async {
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
     scheduleCalls.add(alert.id);
     await super.schedule(alert, options);
   }
 
   @override
   Future<void> cancel(Iterable<int> ids) async {
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
     cancelCalls.addAll(ids);
     await super.cancel(ids);
   }
@@ -31,13 +34,23 @@ class RecordingPlatform extends FakeReminderPlatform {
 void main() {
   setUpAll(() => tzdata.initializeTimeZones());
 
-  final now = DateTime(2026, 11, 10, 8);
+  var now = DateTime(2026, 11, 10, 8);
   late InMemoryCalendarRepository repo;
   late RecordingPlatform platform;
   late ReminderService service;
   var settings = ReminderSettings.defaults;
 
+  ReminderService newService() => ReminderService(
+        platform: platform,
+        repository: repo,
+        prefs: service.prefs,
+        settings: () => settings,
+        horizon: const Duration(days: 7),
+        clock: () => now,
+      );
+
   setUp(() async {
+    now = DateTime(2026, 11, 10, 8);
     SharedPreferences.setMockInitialValues({});
     repo = InMemoryCalendarRepository();
     await repo.upsertSource(const CalendarSource(id: 's', type: SourceType.local, name: 'L'));
@@ -93,6 +106,7 @@ void main() {
     final idA = platform.scheduled.values.firstWhere((x) => x.eventId == 'a').id;
     final idB = platform.scheduled.values.firstWhere((x) => x.eventId == 'b').id;
     platform.scheduleCalls.clear();
+    platform.cancelCalls.clear();
 
     // Rename a, delete b.
     await repo.upsertEvent((await repo.getEvent('a'))!.copyWith(title: 'Renamed'));
@@ -121,12 +135,18 @@ void main() {
     await repo.upsertEvent(event('daily', DateTime(2026, 11, 1, 9), const [Reminder(15, ReminderType.push)],
         rrule: 'FREQ=DAILY'));
     await service.reschedule();
-    // 10 Nov 8:45 … 17 Nov 8:45 minus the past ones → 7 within 7 days.
-    expect(platform.scheduled, hasLength(7));
+    // 10 Nov 8:45 … 16 Nov 8:45 → 7 within 7 days, plus the "open the app"
+    // sentinel because later occurrences are not scheduled yet.
+    final daily = platform.scheduled.values.where((a) => a.eventId == 'daily').toList();
+    expect(daily, hasLength(7));
+    final sentinel = platform.scheduled[sentinelAlertId]!;
+    expect(sentinel.fireAt, now.add(const Duration(days: 7)));
 
     platform.maxPending = 3;
     await service.reschedule();
-    expect(platform.scheduled, hasLength(3));
+    // 2 alerts + the sentinel right after the last one.
+    expect(platform.scheduled.values.where((a) => a.eventId == 'daily'), hasLength(2));
+    expect(platform.scheduled[sentinelAlertId]!.fireAt, DateTime(2026, 11, 11, 8, 46));
 
     await repo.upsertCalendar((await repo.getCalendar('c'))!.copyWith(visible: false));
     await service.reschedule();
@@ -145,6 +165,91 @@ void main() {
     expect(platform.scheduled[testAlertIds[ReminderType.fullScreen]]!.title, 'Test TimeFix');
     await service.reschedule();
     expect(platform.scheduled, hasLength(3));
+    final snoozeId = platform.scheduled.keys.firstWhere((id) => id != alert.id && id != 102);
+    expect(service.isKnownAlert(snoozeId), isTrue);
+    expect(service.upcomingRinging.map((a) => a.id), contains(snoozeId));
+
+    // The event is deleted: its snooze is cancelled too.
+    await repo.deleteEvent('a');
+    await service.reschedule();
+    expect(platform.scheduled.containsKey(snoozeId), isFalse);
+  });
+
+  test('alerts that already fired are never cancelled', () async {
+    await repo.upsertEvent(event('a', DateTime(2026, 11, 10, 14), const [
+      Reminder(30, ReminderType.alarm),
+      Reminder(0, ReminderType.push),
+    ]));
+    await service.reschedule();
+    final alarmId = platform.scheduled.values.firstWhere((a) => a.type == ReminderType.alarm).id;
+    platform.cancelCalls.clear();
+
+    // 13:30:03: the alarm is ringing; the app opens and reschedules.
+    now = DateTime(2026, 11, 10, 13, 30, 3);
+    await service.reschedule();
+    expect(platform.cancelCalls, isNot(contains(alarmId)));
+
+    // Even when the event is then deleted, the ringing alarm is left alone
+    // (only the still-pending push alert is cancelled).
+    await repo.deleteEvent('a');
+    await service.reschedule();
+    expect(platform.cancelCalls, isNot(contains(alarmId)));
+    expect(platform.cancelCalls, hasLength(1));
+  });
+
+  test('a new process schedules everything again (force-stop, restored backup)', () async {
+    await repo.upsertEvent(event('a', DateTime(2026, 11, 10, 14), const [Reminder(10, ReminderType.push)]));
+    await service.reschedule();
+    final scheduled = platform.scheduled.length;
+    // The OS lost the alarms but the saved state says they exist.
+    platform.scheduled.clear();
+    platform.scheduleCalls.clear();
+    await newService().reschedule();
+    expect(platform.scheduled, hasLength(scheduled));
+  });
+
+  test('a permission change schedules everything again', () async {
+    await repo.upsertEvent(event('a', DateTime(2026, 11, 10, 14), const [Reminder(30, ReminderType.alarm)]));
+    await service.reschedule();
+    platform.scheduleCalls.clear();
+    await service.reschedule();
+    expect(platform.scheduleCalls, isEmpty);
+    platform.granted[ReminderPermission.alarmKit] = PermissionState.denied;
+    await service.reschedule();
+    expect(platform.scheduleCalls, hasLength(1));
+  });
+
+  test('rescheduleAll during a running reschedule loses nothing', () async {
+    final slow = RecordingPlatform()..delay = const Duration(milliseconds: 5);
+    final svc = ReminderService(
+      platform: slow,
+      repository: repo,
+      prefs: service.prefs,
+      settings: () => settings,
+      horizon: const Duration(days: 7),
+      clock: () => now,
+    );
+    for (var i = 0; i < 5; i++) {
+      await repo.upsertEvent(event('e$i', DateTime(2026, 11, 11 + i, 9), const [
+        Reminder(10, ReminderType.push),
+        Reminder(30, ReminderType.alarm),
+      ]));
+    }
+    await svc.reschedule();
+    settings = settings.copyWith(alarmSound: 'gentle');
+    final a = svc.reschedule();
+    final b = svc.rescheduleAll();
+    await Future.wait([a, b]);
+    expect(slow.scheduled.values.where((x) => x.eventId.startsWith('e')), hasLength(10));
+  });
+
+  test('unknown ids are not trusted', () async {
+    await repo.upsertEvent(event('a', DateTime(2026, 11, 10, 14), const [Reminder(10, ReminderType.push)]));
+    await service.reschedule();
+    final id = platform.scheduled.values.first.id;
+    expect(service.isKnownAlert(id), isTrue);
+    expect(service.isKnownAlert(99999), isFalse);
+    expect(service.isKnownAlert(testAlertIds[ReminderType.alarm]!), isTrue);
   });
 
   test('device-only reminders are scheduled', () async {

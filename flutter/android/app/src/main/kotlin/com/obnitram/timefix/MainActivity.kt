@@ -11,20 +11,31 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * Shows the app over the lock screen only while a full-screen / alarm
- * reminder is really displayed, so that the rest of the calendar never
- * appears without unlocking.
+ * Full-screen / alarm reminders over the lock screen.
+ *
+ * When a ringing reminder opens the activity, the screen is turned on at
+ * once, but the app is shown over the keyguard only after Dart reports that
+ * the ringing screen is displayed ("enterRing"), so that the calendar itself
+ * never appears without unlocking.
  */
 class MainActivity : FlutterActivity() {
+    private var ringPending = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (isLiveRingIntent(intent)) setShowOnLock(true)
+        onRingIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (isLiveRingIntent(intent)) setShowOnLock(true)
+        onRingIntent(intent)
+    }
+
+    private fun onRingIntent(i: Intent?) {
+        if (!isLiveRingIntent(i)) return
+        ringPending = true
+        setTurnScreenOnCompat(true)
     }
 
     /**
@@ -43,15 +54,23 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun setShowOnLock(on: Boolean) {
+    private fun setShowWhenLockedCompat(on: Boolean) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(on)
+        } else {
+            @Suppress("DEPRECATION")
+            val flag = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+            if (on) window.addFlags(flag) else window.clearFlags(flag)
+        }
+    }
+
+    private fun setTurnScreenOnCompat(on: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setTurnScreenOn(on)
         } else {
             @Suppress("DEPRECATION")
-            val flags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-            if (on) window.addFlags(flags) else window.clearFlags(flags)
+            val flag = WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            if (on) window.addFlags(flag) else window.clearFlags(flag)
         }
     }
 
@@ -60,9 +79,16 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "timefix/reminders")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    // Called when the ringing screen closes.
+                    // The ringing screen is displayed: show it over the keyguard.
+                    "enterRing" -> {
+                        if (ringPending) setShowWhenLockedCompat(true)
+                        result.success(null)
+                    }
+                    // The ringing screen closed.
                     "leaveRing" -> {
-                        setShowOnLock(false)
+                        ringPending = false
+                        setShowWhenLockedCompat(false)
+                        setTurnScreenOnCompat(false)
                         if (call.argument<Boolean>("background") == true) moveTaskToBack(true)
                         result.success(null)
                     }

@@ -109,6 +109,10 @@ class SqliteCalendarRepository implements CalendarRepository {
   static Future<void> _migrateToV3(Database db) async {
     final batch = db.batch();
     batch.execute('ALTER TABLE events ADD COLUMN reminders TEXT');
+    batch.execute('ALTER TABLE events ADD COLUMN extra_alarms TEXT');
+    // CalDAV events were stored without their VALARMs: download them again.
+    batch.execute(
+        "UPDATE calendars SET sync_token = NULL WHERE source_id IN (SELECT id FROM sources WHERE type = 'caldav')");
     // Reminders kept on this device only (read-only calendars, Google
     // full-screen / alarm reminders). Not tied to the events table because
     // synchronisation replaces event rows.
@@ -286,12 +290,12 @@ class SqliteCalendarRepository implements CalendarRepository {
   }
 
   @override
-  Future<void> setLocalReminders(String eventId, List<Reminder> reminders) async {
-    if (reminders.isEmpty) {
-      await _db.delete('local_reminders', where: 'event_id = ?', whereArgs: [eventId]);
+  Future<void> setLocalReminders(String key, List<Reminder> reminders, {bool keepEmpty = false}) async {
+    if (reminders.isEmpty && !keepEmpty) {
+      await _db.delete('local_reminders', where: 'event_id = ?', whereArgs: [key]);
     } else {
       await _db.insert('local_reminders',
-          {'event_id': eventId, 'reminders': Reminder.encodeList(reminders)},
+          {'event_id': key, 'reminders': Reminder.encodeList(reminders)},
           conflictAlgorithm: ConflictAlgorithm.replace);
     }
   }
@@ -351,6 +355,7 @@ class SqliteCalendarRepository implements CalendarRepository {
         'recurrence_id':
             e.recurrenceId == null ? null : _encodeDate(e.recurrenceId!, e.allDay),
         'reminders': e.reminders.isEmpty ? null : Reminder.encodeList(e.reminders),
+        'extra_alarms': e.extraAlarms.isEmpty ? null : jsonEncode(e.extraAlarms),
         'updated_at': e.updatedAt?.millisecondsSinceEpoch,
       };
 
@@ -383,6 +388,9 @@ class SqliteCalendarRepository implements CalendarRepository {
           ? null
           : _decodeDate(r['recurrence_id'] as int, allDay),
       reminders: Reminder.decodeList(r['reminders'] as String?),
+      extraAlarms: r['extra_alarms'] == null
+          ? const []
+          : (jsonDecode(r['extra_alarms'] as String) as List).cast<String>(),
       updatedAt: r['updated_at'] == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(r['updated_at'] as int),

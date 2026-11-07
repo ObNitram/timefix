@@ -4,7 +4,7 @@ import 'reminders.dart';
 /// One alert to schedule on the device.
 class PlannedReminder {
   PlannedReminder({required this.occurrence, required this.reminder})
-      : fireAt = reminder.fireTime(occurrence.start);
+      : fireAt = reminder.fireTime(occurrence.start, allDay: occurrence.allDay);
 
   final EventOccurrence occurrence;
   final Reminder reminder;

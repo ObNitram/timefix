@@ -1339,6 +1339,12 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Les rappels plein écran et les alarmes ont besoin d\'une autorisation pour s\'afficher sur l\'écran verrouillé.'**
   String get fullScreenPermissionHint;
+
+  /// No description provided for @remindersSentinel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ouvrez TimeFix pour programmer vos prochains rappels.'**
+  String get remindersSentinel;
 }
 
 class _AppLocalizationsDelegate

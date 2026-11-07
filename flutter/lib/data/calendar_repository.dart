@@ -37,8 +37,10 @@ abstract class CalendarRepository {
   /// [eventIds] is null).
   Future<Map<String, List<Reminder>>> localReminders([Set<String>? eventIds]);
 
-  /// Replaces the device-only reminders of an event (empty list removes them).
-  Future<void> setLocalReminders(String eventId, List<Reminder> reminders);
+  /// Replaces the device-only reminders stored under [key]. An empty list
+  /// removes the entry, unless [keepEmpty] (an explicit "no reminder" that
+  /// overrides the series, for one occurrence).
+  Future<void> setLocalReminders(String key, List<Reminder> reminders, {bool keepEmpty = false});
 
   /// Events whose title, location or description contains [query].
   Future<List<CalendarEvent>> searchEvents(String query, Set<String> calendarIds,
@@ -59,11 +61,11 @@ class InMemoryCalendarRepository implements CalendarRepository {
       };
 
   @override
-  Future<void> setLocalReminders(String eventId, List<Reminder> reminders) async {
-    if (reminders.isEmpty) {
-      _localReminders.remove(eventId);
+  Future<void> setLocalReminders(String key, List<Reminder> reminders, {bool keepEmpty = false}) async {
+    if (reminders.isEmpty && !keepEmpty) {
+      _localReminders.remove(key);
     } else {
-      _localReminders[eventId] = List.unmodifiable(reminders);
+      _localReminders[key] = List.unmodifiable(reminders);
     }
   }
 

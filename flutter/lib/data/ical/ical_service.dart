@@ -96,6 +96,7 @@ class IcalService {
           rrule: e.recurrenceId == null ? e.rrule : null,
           recurrenceId: e.recurrenceId,
           reminders: includeReminders ? e.reminders : const <Reminder>[],
+          extraAlarms: includeReminders ? e.extraAlarms : const <String>[],
           exdates: [...e.exdates, ...?extraExdates[e.uid]],
           color: e.color == null ? null : _cssColor(e.color!),
           updatedAt: e.lastModified,

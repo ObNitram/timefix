@@ -447,5 +447,6 @@
   },
   "alarmSnoozeShort": "Répéter",
   "notificationPermissionHint": "Autorisez les notifications pour recevoir vos rappels.",
-  "fullScreenPermissionHint": "Les rappels plein écran et les alarmes ont besoin d'une autorisation pour s'afficher sur l'écran verrouillé."
+  "fullScreenPermissionHint": "Les rappels plein écran et les alarmes ont besoin d'une autorisation pour s'afficher sur l'écran verrouillé.",
+  "remindersSentinel": "Ouvrez TimeFix pour programmer vos prochains rappels."
 }

@@ -2,6 +2,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../domain/models.dart';
 import '../../domain/recurrence.dart';
+import '../../domain/reminders.dart';
 import '../calendar_repository.dart';
 import '../event_service.dart';
 import '../ical/ics_writer.dart';
@@ -96,9 +97,18 @@ class CalDavEventWriter {
           exdates: shift == Duration.zero ? master.exdates : const [],
           clearRecurrenceId: true,
         );
+        // Reminder changes for the whole series also apply to the modified
+        // occurrences that had the series' reminders.
+        final remindersChanged = !_sameReminders(updated.reminders, master.reminders);
+        final overrides = [
+          for (final o in others)
+            remindersChanged && _sameReminders(o.reminders, master.reminders)
+                ? o.copyWith(reminders: updated.reminders, updatedAt: now)
+                : o,
+        ];
         // Moving the whole series invalidates its modified occurrences.
         await _write(cal, source, href,
-            before: resource, after: shift == Duration.zero ? [...others, updated] : [updated]);
+            before: resource, after: shift == Duration.zero ? [...overrides, updated] : [updated]);
     }
   }
 
@@ -140,6 +150,15 @@ class CalDavEventWriter {
         : event.copyWith(
             rrule: rruleEndingBefore(event.rrule!, occurrence.start, event.allDay), updatedAt: now);
     await _write(cal, source, href, before: resource, after: [...others, updated]);
+  }
+
+  static bool _sameReminders(List<Reminder> a, List<Reminder> b) {
+    final x = Reminder.normalize(a), y = Reminder.normalize(b);
+    if (x.length != y.length) return false;
+    for (var i = 0; i < x.length; i++) {
+      if (x[i] != y[i]) return false;
+    }
+    return true;
   }
 
   /// Writes [after] as the content of [href] (or deletes it when empty), then

@@ -48,8 +48,8 @@ class EventService {
   /// delays Google cannot express) stay on the device.
   static ({List<Reminder> synced, List<Reminder> local}) splitGoogleReminders(
       List<Reminder> reminders) {
-    final synced = reminders.where(GoogleMapper.isGoogleReminder).take(5).toList();
-    return (synced: synced, local: reminders.where((r) => !synced.contains(r)).toList());
+    final synced = GoogleMapper.googlePart(reminders);
+    return (synced: synced, local: Reminder.normalize(reminders.where((r) => !synced.contains(r))));
   }
 
   /// Saves reminders that cannot be stored with the event on this device.
@@ -73,8 +73,8 @@ class EventService {
       case SourceType.local:
         await repository.upsertEvent(e);
       case SourceType.google:
-        final created =
-            await google.insertEvent(cal.remoteId!, GoogleMapper.toGoogle(e));
+        final created = await google.insertEvent(cal.remoteId!,
+            GoogleMapper.toGoogle(e, calendarDefaults: sync.googleDefaults(cal.id)));
         final key = e.isRecurring
             ? localReminderKey(e.copyWith(calendarId: cal.id, recurringRemoteId: created.id))
             : GoogleMapper.eventId(cal.id, created.id!);
@@ -113,7 +113,9 @@ class EventService {
         return;
       }
       await create(edited.copyWith(id: newEventId()));
-      await delete(original, scope: scope);
+      // A Google instance is moved alone: never delete its whole series.
+      await delete(original,
+          scope: master.recurringRemoteId != null ? RecurrenceScope.thisEvent : scope);
       return;
     }
 
@@ -122,10 +124,29 @@ class EventService {
         await _updateLocal(original, edited, scope);
         await _storeLocalReminders(master, oldSource.type, edited.reminders);
       case SourceType.google:
-        await _storeLocalReminders(master, oldSource.type, edited.reminders);
         // Google instances are stored individually: edit this one only.
-        await google.patchEvent(oldCal.remoteId!, master.remoteId!,
-            GoogleMapper.toGoogle(edited, includeRecurrence: !master.isPartOfSeries));
+        // Reminders are sent only when their Google part changed, so that
+        // e-mail reminders and `useDefault` are left alone otherwise.
+        await google.patchEvent(
+            oldCal.remoteId!,
+            master.remoteId!,
+            GoogleMapper.toGoogle(
+              edited,
+              includeRecurrence: !master.isPartOfSeries,
+              includeReminders: !GoogleMapper.sameGoogleReminders(edited.reminders, master.reminders),
+              calendarDefaults: sync.googleDefaults(oldCal.id),
+            ));
+        final local = splitGoogleReminders(edited.reminders).local;
+        if (master.recurringRemoteId != null) {
+          // One occurrence edited alone: its own entry overrides the series.
+          await repository.setLocalReminders(master.id, local, keepEmpty: true);
+        } else if (edited.isRecurring && !master.isPartOfSeries) {
+          // A single event becomes a series: instances use the series key.
+          await repository.setLocalReminders(master.id, const []);
+          await repository.setLocalReminders('${oldCal.id}|series|${master.remoteId}', local);
+        } else {
+          await repository.setLocalReminders(localReminderKey(master), local);
+        }
         await sync.syncGoogleCalendar(oldCal, interactive: true);
       case SourceType.caldav:
         await _caldav.update(original, edited, scope, oldCal, oldSource);
@@ -199,7 +220,9 @@ class EventService {
         await google.deleteEvent(cal.remoteId!, id);
         if (id == master.remoteId) {
           await repository.deleteEvent(master.id);
+          await repository.setLocalReminders(master.id, const []);
         } else {
+          await repository.setLocalReminders(localReminderKey(master), const []);
           await sync.syncGoogleCalendar(cal, interactive: true);
         }
       case SourceType.caldav:

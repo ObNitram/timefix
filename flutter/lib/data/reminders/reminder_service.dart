@@ -23,19 +23,27 @@ const testAlertIds = {
   ReminderType.alarm: 103,
 };
 
+/// "Open the app" notification placed after the last scheduled alert when
+/// some reminders could not be scheduled yet.
+const sentinelAlertId = 104;
+
 /// Keeps the device's scheduled alerts in sync with the events.
 ///
-/// Only the next alerts are scheduled (a horizon of a few weeks, and at most
-/// [ReminderPlatform.maxPending]); [reschedule] runs again on every app start,
-/// return to the foreground and data change, so later alerts are added in
-/// time. Only changed alerts are cancelled / scheduled again.
+/// * Only the next alerts are scheduled (the platform's horizon, at most
+///   [ReminderPlatform.maxPending]); [reschedule] runs on every app start,
+///   return to the foreground and data change.
+/// * Alerts whose time has passed are never cancelled: they may be ringing
+///   or waiting in the notification shade.
+/// * The first run of a process schedules everything again (alarms are lost
+///   on force-stop, restored backups contain stale state), as does any change
+///   of permissions; later runs only touch changed alerts.
 class ReminderService {
   ReminderService({
     required this.platform,
     required this.repository,
     required this.prefs,
     required this.settings,
-    this.horizon = const Duration(days: 21),
+    this.horizon,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
 
@@ -43,17 +51,23 @@ class ReminderService {
   final CalendarRepository repository;
   final SharedPreferences prefs;
   final ReminderSettings Function() settings;
-  final Duration horizon;
+  /// Overrides the platform's planning horizon (tests).
+  final Duration? horizon;
   final DateTime Function() _clock;
 
-  static const _stateKey = 'scheduledReminders';
+  static const _stateKey = 'scheduledReminders.v2';
+  static const _permissionsKey = 'reminderPermissions';
+  static const _snoozesKey = 'snoozedReminders';
 
   Future<void>? _running;
   bool _again = false;
+  bool _fullNext = true;
 
-  /// Full-screen and alarm alerts scheduled by the last [reschedule], so the
-  /// app can show the ringing screen itself while it is in the foreground
-  /// (the system gives no callback when a notification fires).
+  Duration get planningHorizon => horizon ?? platform.planningHorizon;
+
+  /// Full-screen and alarm alerts still to come (planned and snoozed), so
+  /// the app can show the ringing screen itself while it is in the
+  /// foreground (the system gives no callback when a notification fires).
   List<ReminderAlert> upcomingRinging = const [];
 
   AlarmOptions get alarmOptions {
@@ -120,8 +134,8 @@ class ReminderService {
     );
   }
 
-  /// Recomputes and schedules the upcoming alerts. Concurrent calls are
-  /// coalesced.
+  /// Recomputes and schedules the upcoming alerts. Calls are serialized:
+  /// a call during a run makes the run start over once it is done.
   Future<void> reschedule() {
     if (_running != null) {
       _again = true;
@@ -141,11 +155,28 @@ class ReminderService {
     return run;
   }
 
+  /// Schedules every alert again (after a permission change, for instance).
+  Future<void> rescheduleAll() {
+    _fullNext = true;
+    return reschedule();
+  }
+
   Future<void> _reschedule() async {
+    final full = _fullNext;
+    _fullNext = false;
+    final l10n = localizations();
     // Alert texts are formatted outside of the widget tree.
-    await initializeDateFormatting(localizations().localeName);
+    await initializeDateFormatting(l10n.localeName);
     final now = _clock();
-    final until = now.add(horizon);
+    final nowMs = now.millisecondsSinceEpoch;
+
+    // Permission changes (also made in the system settings) may move alerts
+    // between delivery mechanisms (AlarmKit / notification): redo everything.
+    final perms = await platform.permissions();
+    final fingerprint = ReminderPermission.values.map((p) => '${p.name}=${perms[p]?.name}').join(',');
+    final forceAll = full || prefs.getString(_permissionsKey) != fingerprint;
+
+    final until = now.add(planningHorizon);
     final calendars = {
       for (final c in await repository.getCalendars())
         if (c.visible) c.id: c
@@ -154,71 +185,173 @@ class ReminderService {
     // (all-day "the same day at 9:00").
     final range = DateRange(
       addDays(dateOnly(now), -2),
-      until.add(const Duration(minutes: maxReminderMinutes)),
+      until.add(const Duration(days: 7 * 4 + 1)),
     );
     final events = await repository.eventsForRange(range, calendars.keys.toSet());
     final occurrences = expandEvents(events, calendars, range);
+    final local = await repository.localReminders();
+    final snoozes = await _activeSnoozes(now);
+    // One slot for the sentinel, and the pending snoozes.
+    final cap = (platform.maxPending - 1 - snoozes.length).clamp(0, platform.maxPending);
     final planned = planReminders(
       occurrences: occurrences,
-      localReminders: await repository.localReminders(),
+      localReminders: local,
       now: now,
       until: until,
-      maxCount: platform.maxPending,
+      maxCount: cap,
+    );
+    final later = planReminders(
+      occurrences: occurrences,
+      localReminders: local,
+      now: now,
+      until: until.add(const Duration(days: 7 * 4)),
     );
 
     final options = alarmOptions;
-    final optionsSig = '${options.sound}|${options.vibrate}|${options.autoStop.inMinutes}|'
-        '${options.snoozeLabel}';
-    final previous = _loadState();
-    final next = <int, String>{};
-    for (final p in planned) {
-      next[p.notificationId] = '${p.signature}|${p.type == ReminderType.alarm ? optionsSig : ''}';
+    final ringSig = '${options.sound}|${options.vibrate}|${options.autoStop.inMinutes}|${options.snoozeLabel}';
+    final alerts = <ReminderAlert>[for (final p in planned) alertFor(p)];
+    final signatures = <int, String>{
+      for (var i = 0; i < planned.length; i++)
+        planned[i].notificationId:
+            '${planned[i].signature}|${l10n.localeName}|${planned[i].type == ReminderType.push ? '' : ringSig}',
+    };
+
+    // Some reminders are left for later (cap or horizon): remind the user to
+    // open the app before the last scheduled alert is over.
+    if (later.length > planned.length) {
+      final at = planned.length >= cap && planned.isNotEmpty
+          ? planned.last.fireAt.add(const Duration(minutes: 1))
+          : until;
+      alerts.add(ReminderAlert(
+        id: sentinelAlertId,
+        type: ReminderType.push,
+        fireAt: at,
+        title: l10n.appTitle,
+        body: l10n.remindersSentinel,
+        eventId: 'sentinel',
+        start: at,
+        end: at,
+      ));
+      signatures[sentinelAlertId] = 'sentinel|${at.millisecondsSinceEpoch}|${l10n.localeName}';
     }
 
+    final previous = _loadState();
+    final next = <int, ({String sig, int fireAt})>{
+      for (final a in alerts) a.id: (sig: signatures[a.id]!, fireAt: a.fireAt.millisecondsSinceEpoch),
+    };
+
+    // Cancel only alerts that are still pending; fired ones are left alone.
     final toCancel = [
       for (final e in previous.entries)
-        if (next[e.key] != e.value) e.key
+        if (e.value.fireAt > nowMs && next[e.key]?.sig != e.value.sig) e.key
     ];
     if (toCancel.isNotEmpty) await platform.cancel(toCancel);
-    for (final p in planned) {
-      if (previous[p.notificationId] == next[p.notificationId]) continue;
-      await platform.schedule(alertFor(p), options);
+    for (final a in alerts) {
+      if (!forceAll && previous[a.id]?.sig == next[a.id]!.sig) continue;
+      await platform.schedule(a, options);
     }
-    await prefs.setString(_stateKey, jsonEncode({for (final e in next.entries) '${e.key}': e.value}));
+    if (forceAll) {
+      for (final s in snoozes) {
+        await platform.schedule(s, options);
+      }
+    }
+    await _saveState(next);
+    await prefs.setString(_permissionsKey, fingerprint);
+
     upcomingRinging = [
-      for (final p in planned)
-        if (p.type != ReminderType.push) alertFor(p),
-    ];
+      ...alerts.where((a) => a.type != ReminderType.push),
+      ...snoozes.where((a) => a.type != ReminderType.push),
+    ]..sort((a, b) => a.fireAt.compareTo(b.fireAt));
   }
 
-  Map<int, String> _loadState() {
+  Map<int, ({String sig, int fireAt})> _loadState() {
     try {
       final raw = jsonDecode(prefs.getString(_stateKey) ?? '{}') as Map<String, dynamic>;
-      return {for (final e in raw.entries) int.parse(e.key): e.value as String};
+      return {
+        for (final e in raw.entries)
+          int.parse(e.key): (
+            sig: (e.value as Map<String, dynamic>)['s'] as String,
+            fireAt: (e.value['f'] as num).toInt(),
+          ),
+      };
     } catch (_) {
       return {};
     }
   }
 
-  /// Forgets everything that was scheduled (e.g. after a permission change).
-  Future<void> rescheduleAll() async {
-    final previous = _loadState();
-    if (previous.isNotEmpty) await platform.cancel(previous.keys);
-    await prefs.remove(_stateKey);
-    await reschedule();
+  Future<void> _saveState(Map<int, ({String sig, int fireAt})> state) => prefs.setString(
+      _stateKey,
+      jsonEncode({
+        for (final e in state.entries) '${e.key}': {'s': e.value.sig, 'f': e.value.fireAt},
+      }));
+
+  // ---------------------------------------------------------------------------
+  // Snooze
+  // ---------------------------------------------------------------------------
+
+  Map<int, ReminderAlert> _loadSnoozes() {
+    try {
+      final raw = jsonDecode(prefs.getString(_snoozesKey) ?? '{}') as Map<String, dynamic>;
+      return {
+        for (final e in raw.entries)
+          if (ReminderAlert.fromPayload(e.value['a'] as String) case final a?)
+            int.parse(e.key): a.copyWith(fireAt: DateTime.fromMillisecondsSinceEpoch((e.value['f'] as num).toInt())),
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> _saveSnoozes(Map<int, ReminderAlert> snoozes) => prefs.setString(
+      _snoozesKey,
+      jsonEncode({
+        for (final e in snoozes.entries)
+          '${e.key}': {'a': e.value.toPayload(), 'f': e.value.fireAt.millisecondsSinceEpoch},
+      }));
+
+  /// Pending snoozes; those whose event was deleted are cancelled.
+  Future<List<ReminderAlert>> _activeSnoozes(DateTime now) async {
+    final snoozes = _loadSnoozes();
+    final keep = <int, ReminderAlert>{};
+    final gone = <int>[];
+    for (final e in snoozes.entries) {
+      if (!e.value.fireAt.isAfter(now)) continue; // fired: forget it
+      final eventId = e.value.eventId;
+      final exists = eventId == 'test' || await repository.getEvent(eventId) != null;
+      if (exists) {
+        keep[e.key] = e.value;
+      } else {
+        gone.add(e.key);
+      }
+    }
+    if (gone.isNotEmpty) await platform.cancel(gone);
+    if (keep.length != snoozes.length) await _saveSnoozes(keep);
+    return keep.values.toList();
   }
 
   /// Stops [alert] and delivers it again after the snooze delay.
   Future<DateTime> snooze(ReminderAlert alert) async {
     await platform.stop(alert.id);
     final at = _clock().add(alarmOptions.snooze);
-    // Distinct id so that the next rescheduling does not cancel it.
-    final snoozeId = stableNotificationId('snooze:${alert.id}');
-    await platform.schedule(alert.copyWith(id: snoozeId, fireAt: at), alarmOptions);
+    // Distinct id, tracked separately from planned alerts.
+    final snoozed = alert.copyWith(id: stableNotificationId('snooze:${alert.id}'), fireAt: at);
+    await platform.schedule(snoozed, alarmOptions);
+    final snoozes = _loadSnoozes()..[snoozed.id] = snoozed;
+    await _saveSnoozes(snoozes);
+    upcomingRinging = [...upcomingRinging, if (snoozed.type != ReminderType.push) snoozed]
+      ..sort((a, b) => a.fireAt.compareTo(b.fireAt));
     return at;
   }
 
   Future<void> stop(ReminderAlert alert) => platform.stop(alert.id);
+
+  /// Whether [id] is an alert this app scheduled (responses carrying other
+  /// ids are ignored: on Android anyone can send the launch intent).
+  bool isKnownAlert(int id) =>
+      testAlertIds.containsValue(id) ||
+      id == sentinelAlertId ||
+      _loadState().containsKey(id) ||
+      _loadSnoozes().containsKey(id);
 
   /// Delivers a sample alert of [type] in 5 seconds.
   Future<void> scheduleTest(ReminderType type, {Locale? locale}) async {
@@ -239,6 +372,8 @@ class ReminderService {
         .copyWith(id: testAlertIds[type], fireAt: now.add(const Duration(seconds: 5)));
     await platform.cancel([alert.id]);
     await platform.schedule(alert, alarmOptions);
+    if (type != ReminderType.push) {
+      upcomingRinging = [...upcomingRinging, alert]..sort((a, b) => a.fireAt.compareTo(b.fireAt));
+    }
   }
 }
-

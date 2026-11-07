@@ -10,7 +10,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:uuid/uuid.dart';
 
-import '../../core/time_zone.dart';
 import '../../domain/reminder_planner.dart' show stableNotificationId;
 import '../../domain/reminders.dart';
 import 'reminder_platform.dart';
@@ -33,9 +32,12 @@ const alarmKitSnoozeEnabled = false;
 ///
 /// * push: standard notification;
 /// * full screen: Android full-screen intent, iOS Time Sensitive notification;
-/// * alarm: Android alarm clock (`setAlarmClock`) with a looping alarm sound
-///   (FLAG_INSISTENT) on a dedicated channel, auto-stopped by `timeoutAfter`;
-///   iOS 26+ AlarmKit alarm, older iOS a Time Sensitive notification.
+/// * alarm: Android exact alarm with a looping alarm sound (FLAG_INSISTENT)
+///   on a dedicated channel, auto-stopped by `timeoutAfter`; iOS 26+ AlarmKit
+///   alarm, older iOS a Time Sensitive notification.
+///
+/// Times are sent in UTC: a local wall time is ambiguous during the hour
+/// repeated when DST ends.
 class NotificationsReminderPlatform implements ReminderPlatform {
   NotificationsReminderPlatform();
 
@@ -51,6 +53,9 @@ class NotificationsReminderPlatform implements ReminderPlatform {
 
   @override
   int get maxPending => _isIos ? 60 : 400;
+
+  @override
+  Duration get planningHorizon => _isIos ? const Duration(days: 21) : const Duration(days: 35);
 
   @override
   Future<void> initialize({
@@ -109,10 +114,14 @@ class NotificationsReminderPlatform implements ReminderPlatform {
   @override
   Future<void> schedule(ReminderAlert alert, AlarmOptions options) async {
     if (!alert.fireAt.isAfter(DateTime.now())) return;
-    if (_isIos && alert.type == ReminderType.alarm && await _scheduleAlarmKit(alert, options)) {
-      return;
+    if (_isIos && alert.type == ReminderType.alarm) {
+      if (await _scheduleAlarmKit(alert, options)) {
+        await _fln.cancel(id: alert.id); // no leftover notification fallback
+        return;
+      }
+      await _cancelAlarmKit(alert.id);
     }
-    await _zonedSchedule(_fln, alert, options, tz.TZDateTime.from(alert.fireAt, deviceLocation));
+    await _zonedSchedule(_fln, alert, options, tz.TZDateTime.from(alert.fireAt, tz.UTC));
   }
 
   /// Shared with the background isolate (snooze from the notification).
@@ -128,9 +137,10 @@ class NotificationsReminderPlatform implements ReminderPlatform {
           androidScheduleMode: mode,
         );
     try {
-      await run(alert.type == ReminderType.alarm
-          ? AndroidScheduleMode.alarmClock
-          : AndroidScheduleMode.exactAllowWhileIdle);
+      // Not `alarmClock`: the plugin registers its delivery broadcast as the
+      // alarm's "show" intent, so tapping the next-alarm chip of the system
+      // UI would ring it at once (and drop it from the reboot cache).
+      await run(AndroidScheduleMode.exactAllowWhileIdle);
     } on PlatformException catch (e) {
       // Exact alarms not allowed: deliver anyway, possibly a few minutes late.
       if (e.code != 'exact_alarms_not_permitted') rethrow;
@@ -218,7 +228,9 @@ class NotificationsReminderPlatform implements ReminderPlatform {
             presentBanner: true,
             presentList: true,
             presentSound: true,
-            sound: o.sound == 'system' ? null : 'timefix_alarm_${o.sound}.caf',
+            // Notifications cannot use the iOS alarm tone: "system" gets the
+            // classic bundled ringtone (28 s) instead of the short ding.
+            sound: 'timefix_alarm_${o.sound == 'system' ? 'classic' : o.sound}.caf',
             interruptionLevel: InterruptionLevel.timeSensitive,
             categoryIdentifier: _iosAlarmCategory,
           ),
@@ -232,6 +244,8 @@ class NotificationsReminderPlatform implements ReminderPlatform {
 
   static String _alarmKitId(int id) => const Uuid().v5(Namespace.url.value, 'timefix:alarm:$id');
 
+  /// Cached for a run of scheduling; refreshed by [permissions], which the
+  /// reminder service calls at the start of every run.
   Future<bool> _alarmKitReady() async {
     if (_alarmKitUsable != null) return _alarmKitUsable!;
     try {
@@ -275,6 +289,8 @@ class NotificationsReminderPlatform implements ReminderPlatform {
 
   Future<void> _cancelAlarmKit(int id) async {
     try {
+      // Also when authorization was revoked: alarms already handed to
+      // AlarmKit must not ring for deleted events.
       await AlarmKit.instance.cancel(_alarmKitId(id));
     } catch (_) {
       // Unknown id or unsupported.
@@ -285,12 +301,20 @@ class NotificationsReminderPlatform implements ReminderPlatform {
   // Cancel / stop
   // ---------------------------------------------------------------------------
 
+  Future<bool> _alarmKitSupported() async {
+    try {
+      return await AlarmKit.instance.isSupported();
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   Future<void> cancel(Iterable<int> ids) async {
-    final useAlarmKit = _isIos && await _alarmKitReady();
+    final alarmKit = _isIos && await _alarmKitSupported();
     for (final id in ids) {
       await _fln.cancel(id: id);
-      if (useAlarmKit) await _cancelAlarmKit(id);
+      if (alarmKit) await _cancelAlarmKit(id);
     }
   }
 
@@ -298,7 +322,7 @@ class NotificationsReminderPlatform implements ReminderPlatform {
   Future<void> stop(int id) async {
     // Cancelling the notification stops the looping sound on Android.
     await _fln.cancel(id: id);
-    if (_isIos && await _alarmKitReady()) {
+    if (_isIos && await _alarmKitSupported()) {
       try {
         await AlarmKit.instance.stop(_alarmKitId(id));
       } catch (_) {}
@@ -306,17 +330,31 @@ class NotificationsReminderPlatform implements ReminderPlatform {
   }
 
   @override
-  Future<bool> isRinging(int id) async {
-    if (_isIos) return true; // no looping sound to track on iOS
-    final active = await _fln.getActiveNotifications();
-    return active.any((n) => n.id == id);
+  Future<bool?> isRinging(int id) async {
+    try {
+      if (_isIos && await _alarmKitReady()) {
+        final alarm = (await AlarmKit.instance.alarms())
+            .where((a) => a.id.toLowerCase() == _alarmKitId(id))
+            .firstOrNull;
+        if (alarm != null) return alarm.state == AlarmState.alerting;
+      }
+      final active = await _fln.getActiveNotifications();
+      return active.any((n) => n.id == id);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
-  Future<void> leaveRing({required bool background}) async {
+  Future<void> enterRing() => _invoke('enterRing');
+
+  @override
+  Future<void> leaveRing({required bool background}) => _invoke('leaveRing', {'background': background});
+
+  Future<void> _invoke(String method, [Object? args]) async {
     if (_isIos) return;
     try {
-      await _channel.invokeMethod<void>('leaveRing', {'background': background});
+      await _channel.invokeMethod<void>(method, args);
     } on MissingPluginException {
       // Not running in the app's activity.
     }
@@ -334,10 +372,12 @@ class NotificationsReminderPlatform implements ReminderPlatform {
     if (_isIos) {
       final perms = await _ios?.checkPermissions();
       result[ReminderPermission.notifications] = of(perms?.isEnabled);
+      _alarmKitUsable = false;
       try {
         if (await AlarmKit.instance.isSupported()) {
           final state = await AlarmKit.instance.authorizationState();
-          result[ReminderPermission.alarmKit] = of(state == AlarmAuthorization.authorized);
+          _alarmKitUsable = state == AlarmAuthorization.authorized;
+          result[ReminderPermission.alarmKit] = of(_alarmKitUsable);
         }
       } catch (_) {}
       return result;
@@ -359,18 +399,24 @@ class NotificationsReminderPlatform implements ReminderPlatform {
   Future<void> request(ReminderPermission permission) async {
     switch (permission) {
       case ReminderPermission.notifications:
-        if (_isIos) {
-          await _ios?.requestPermissions(alert: true, badge: true, sound: true);
-        } else {
-          await _android?.requestNotificationsPermission();
-        }
+        final granted = _isIos
+            ? await _ios?.requestPermissions(alert: true, badge: true, sound: true)
+            : await _android?.requestNotificationsPermission();
+        // Already refused: the system shows no dialog any more.
+        if (granted != true) await _fln.openAppNotificationSettings();
       case ReminderPermission.exactAlarms:
         await _android?.requestExactAlarmsPermission();
       case ReminderPermission.fullScreen:
         await _android?.requestFullScreenIntentPermission();
       case ReminderPermission.alarmKit:
         try {
-          await AlarmKit.instance.requestAuthorization();
+          final state = await AlarmKit.instance.authorizationState();
+          if (state == AlarmAuthorization.notDetermined) {
+            await AlarmKit.instance.requestAuthorization();
+          } else if (state == AlarmAuthorization.denied) {
+            // The "Alarms" switch is in the app's page of the Settings app.
+            await _fln.openAppNotificationSettings();
+          }
         } catch (_) {}
         _alarmKitUsable = null;
     }

@@ -107,7 +107,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
 
   /// Adds the reminders kept on this device (e.g. Google alarms).
   Future<void> _loadDeviceReminders(CalendarEvent e) async {
-    final local = await ref.read(repositoryProvider).localReminders({localReminderKey(e)});
+    final local = await ref.read(repositoryProvider).localReminders(deviceReminderKeys(e).toSet());
     if (!mounted || _remindersTouched || local.isEmpty) return;
     setState(() => _reminders = effectiveReminders(e, local));
   }
@@ -269,6 +269,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
       remoteId: base.remoteId,
       recurringRemoteId: base.recurringRemoteId,
       reminders: _reminders,
+      extraAlarms: base.extraAlarms,
     );
   }
 

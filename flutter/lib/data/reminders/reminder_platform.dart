@@ -197,6 +197,9 @@ abstract class ReminderPlatform {
   /// How many alerts may be pending at once (iOS keeps only 64).
   int get maxPending;
 
+  /// How far ahead alerts are scheduled.
+  Duration get planningHorizon;
+
   Future<void> initialize({
     required ReminderTexts texts,
     required void Function(ReminderResponse response) onResponse,
@@ -212,9 +215,13 @@ abstract class ReminderPlatform {
   /// Stops a ringing alarm / removes a delivered alert.
   Future<void> stop(int id);
 
-  /// Whether the alarm [id] is still ringing (false once stopped from the
-  /// notification or after the auto-stop delay).
-  Future<bool> isRinging(int id);
+  /// Whether the alarm [id] is ringing / its notification is displayed.
+  /// Null when the platform cannot tell.
+  Future<bool?> isRinging(int id);
+
+  /// Called once the ringing screen is displayed: the app may then show over
+  /// the lock screen (and only then).
+  Future<void> enterRing();
 
   /// Called when the ringing screen closes: stop showing the app over the
   /// lock screen, and go back to the background if the alert opened the app.
@@ -238,6 +245,14 @@ class FakeReminderPlatform implements ReminderPlatform {
 
   @override
   int maxPending = 500;
+
+  @override
+  Duration planningHorizon = const Duration(days: 21);
+
+  int enteredRing = 0;
+
+  @override
+  Future<void> enterRing() async => enteredRing++;
 
   @override
   Future<void> initialize({
@@ -269,8 +284,11 @@ class FakeReminderPlatform implements ReminderPlatform {
   @override
   Future<void> stop(int id) async => stopped.add(id);
 
+  /// Ids currently "displayed" (null: the fake cannot tell).
+  Set<int>? displayed;
+
   @override
-  Future<bool> isRinging(int id) async => !stopped.contains(id);
+  Future<bool?> isRinging(int id) async => displayed?.contains(id);
 
   int leftRing = 0;
 

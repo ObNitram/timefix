@@ -60,6 +60,9 @@ class IcsWriter {
       for (final r in e.reminders) {
         lines.addAll(_alarm(r, e.title));
       }
+      for (final raw in e.extraAlarms) {
+        lines.addAll(raw.split('\r\n').where((l) => l.isNotEmpty));
+      }
       lines.add('END:VEVENT');
     }
     lines.add('END:VCALENDAR');

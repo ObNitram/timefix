@@ -53,6 +53,9 @@ class SyncService {
   /// Default reminders of each Google calendar (from the calendar list).
   final Map<String, List<Reminder>> _googleDefaults = {};
 
+  /// Known default reminders of a Google calendar (null if not loaded yet).
+  List<Reminder>? googleDefaults(String calendarId) => _googleDefaults[calendarId];
+
   /// Google events are fetched in `[now - past, now + future]`.
   final Duration googlePastWindow;
   final Duration googleFutureWindow;

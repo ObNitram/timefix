@@ -166,6 +166,7 @@ class CalendarEvent {
     this.etag,
     this.recurrenceId,
     this.reminders = const [],
+    this.extraAlarms = const [],
     this.updatedAt,
   });
 
@@ -209,6 +210,11 @@ class CalendarEvent {
   /// Reminders stored with the event (synced for CalDAV, local otherwise).
   /// Reminders on read-only events live in the repository's local reminders.
   final List<Reminder> reminders;
+
+  /// VALARM blocks TimeFix cannot represent (e-mail alarms, absolute triggers
+  /// on a series, more than 4 weeks…), kept verbatim so that rewriting a
+  /// CalDAV resource does not delete them.
+  final List<String> extraAlarms;
   final DateTime? updatedAt;
 
   bool get isRecurring => rrule != null && rrule!.isNotEmpty;
@@ -241,6 +247,7 @@ class CalendarEvent {
     DateTime? recurrenceId,
     bool clearRecurrenceId = false,
     List<Reminder>? reminders,
+    List<String>? extraAlarms,
     DateTime? updatedAt,
   }) =>
       CalendarEvent(
@@ -264,6 +271,7 @@ class CalendarEvent {
         etag: etag ?? this.etag,
         recurrenceId: clearRecurrenceId ? null : (recurrenceId ?? this.recurrenceId),
         reminders: reminders ?? this.reminders,
+        extraAlarms: extraAlarms ?? this.extraAlarms,
         updatedAt: updatedAt ?? this.updatedAt,
       );
 }
@@ -274,9 +282,28 @@ String localReminderKey(CalendarEvent e) => e.recurringRemoteId != null
     ? '${e.calendarId}|series|${e.recurringRemoteId}'
     : e.id;
 
+/// Keys that may hold the device-only reminders of [e], most specific first:
+/// the event itself (a Google instance edited alone, an iCal / CalDAV
+/// modified occurrence), then its series.
+List<String> deviceReminderKeys(CalendarEvent e) => [
+      e.id,
+      if (e.recurringRemoteId != null) '${e.calendarId}|series|${e.recurringRemoteId}',
+      if (e.recurrenceId != null && e.remoteId != null) '${e.calendarId}|${e.remoteId}',
+    ];
+
+/// Device-only reminders of [e]: the first key that has an entry wins (an
+/// empty entry means "none for this occurrence").
+List<Reminder> deviceReminders(CalendarEvent e, Map<String, List<Reminder>> local) {
+  for (final key in deviceReminderKeys(e)) {
+    final list = local[key];
+    if (list != null) return list;
+  }
+  return const [];
+}
+
 /// Reminders of an event: those stored with it plus the device-only ones.
 List<Reminder> effectiveReminders(CalendarEvent e, Map<String, List<Reminder>> local) =>
-    Reminder.normalize([...e.reminders, ...?local[localReminderKey(e)]]);
+    Reminder.normalize([...e.reminders, ...deviceReminders(e, local)]);
 
 /// One concrete occurrence of an event, ready to be displayed.
 class EventOccurrence {

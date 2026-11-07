@@ -99,11 +99,15 @@ void main() {
       start: now.add(const Duration(minutes: 30)),
       end: now.add(const Duration(minutes: 90)),
     );
+    // Not scheduled by the service, but really displayed by the system.
+    platform.displayed = {4242};
     platform.respond(ReminderResponse(alert, ReminderAction.open));
     // The ringing screen animates forever: advance time step by step (it
     // closes itself after the auto-stop delay).
+    // The response is checked (asynchronously) before the screen opens.
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(AlarmRingScreen), findsOneWidget);
     expect(find.text('Réveil vol'), findsOneWidget);
 
@@ -116,18 +120,59 @@ void main() {
     expect(snoozed.fireAt.difference(DateTime.now()).inMinutes, inInclusiveRange(9, 10));
   });
 
+  testWidgets('responses for unknown alerts are ignored (forged intents)', (tester) async {
+    await phone(tester);
+    final platform = FakeReminderPlatform()..displayed = {};
+    await tester.pumpWidget(await buildTestApp(repository: await seededRepository(), reminders: platform));
+    await settle(tester);
+    final now = DateTime.now();
+    final forged = ReminderAlert(id: 777, type: ReminderType.alarm, fireAt: now, title: 'Appelez le 0899…',
+        body: '', eventId: 'x', start: now, end: now);
+    platform.respond(ReminderResponse(forged, ReminderAction.open));
+    platform.respond(ReminderResponse(forged, ReminderAction.snooze));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(AlarmRingScreen), findsNothing);
+    expect(platform.scheduled.values.where((a) => a.title.startsWith('Appelez')), isEmpty);
+  });
+
+  testWidgets('the ringing screen closes when the alarm is stopped elsewhere', (tester) async {
+    await phone(tester);
+    final platform = FakeReminderPlatform()..displayed = {55};
+    await tester.pumpWidget(await buildTestApp(repository: await seededRepository(), reminders: platform));
+    await settle(tester);
+    final now = DateTime.now();
+    platform.respond(ReminderResponse(
+        ReminderAlert(id: 55, type: ReminderType.alarm, fireAt: now, title: 'Ailleurs', body: '',
+            eventId: 'test', start: now, end: now),
+        ReminderAction.open));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(AlarmRingScreen), findsOneWidget);
+    expect(platform.enteredRing, 1);
+    platform.displayed = {}; // stopped from the notification / watch
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(AlarmRingScreen), findsNothing);
+    expect(platform.leftRing, 1);
+  });
+
   testWidgets('the ringing screen stops by itself after the auto-stop delay', (tester) async {
     await phone(tester);
     final platform = FakeReminderPlatform();
     await tester.pumpWidget(await buildTestApp(repository: await seededRepository(), reminders: platform));
     await settle(tester);
     final now = DateTime.now();
+    platform.displayed = {7};
     platform.respond(ReminderResponse(
         ReminderAlert(id: 7, type: ReminderType.alarm, fireAt: now, title: 'Auto', body: '',
             eventId: 'test', start: now, end: now),
         ReminderAction.open));
     await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(AlarmRingScreen), findsOneWidget);
     for (var i = 0; i < 5 * 60 + 2; i++) {
       await tester.pump(const Duration(seconds: 1));

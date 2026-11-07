@@ -806,4 +806,8 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get fullScreenPermissionHint =>
       'Les rappels plein écran et les alarmes ont besoin d\'une autorisation pour s\'afficher sur l\'écran verrouillé.';
+
+  @override
+  String get remindersSentinel =>
+      'Ouvrez TimeFix pour programmer vos prochains rappels.';
 }

@@ -51,6 +51,35 @@ void main() {
       expect(allDayDelayParts(6 * 60), (daysBefore: 1, hour: 18, minute: 0));
     });
 
+    test('fire times are wall-clock times (DST safe)', () {
+      // Whatever the machine's time zone: day / hour fields, not durations.
+      final allDayStart = DateTime(2026, 3, 30); // DST changed on 29 March in Europe
+      expect(const Reminder(-9 * 60, ReminderType.push).fireTime(allDayStart, allDay: true),
+          DateTime(2026, 3, 30, 9));
+      expect(Reminder(allDayDelay(daysBefore: 2, hour: 9, minute: 0), ReminderType.push)
+          .fireTime(allDayStart, allDay: true), DateTime(2026, 3, 28, 9));
+      final timed = DateTime(2026, 10, 26, 8, 30);
+      expect(const Reminder(24 * 60, ReminderType.push).fireTime(timed), DateTime(2026, 10, 25, 8, 30));
+      expect(const Reminder(7 * 24 * 60, ReminderType.push).fireTime(timed), DateTime(2026, 10, 19, 8, 30));
+      expect(const Reminder(24 * 60 + 30, ReminderType.push).fireTime(timed), DateTime(2026, 10, 25, 8));
+      expect(const Reminder(15, ReminderType.push).fireTime(timed), DateTime(2026, 10, 26, 8, 15));
+    });
+
+    test('device-only reminders: occurrence entry, then series, then iCal master', () {
+      final instance = event(id: 'c|inst1', recurringRemoteId: 'S');
+      expect(deviceReminderKeys(instance), ['c|inst1', 'c|series|S']);
+      final series = {'c|series|S': const [Reminder(10, ReminderType.alarm)]};
+      expect(deviceReminders(instance, series), const [Reminder(10, ReminderType.alarm)]);
+      // An explicit empty entry for this occurrence wins over the series.
+      expect(deviceReminders(instance, {...series, 'c|inst1': const <Reminder>[]}), isEmpty);
+      // A modified occurrence of an iCal series falls back to the series.
+      final override = CalendarEvent(
+          id: 'c|uid|123', calendarId: 'c', remoteId: 'uid', title: 'x',
+          start: DateTime(2026, 11, 10), end: DateTime(2026, 11, 10, 1), recurrenceId: DateTime(2026, 11, 9));
+      expect(deviceReminders(override, {'c|uid': const [Reminder(5, ReminderType.push)]}),
+          const [Reminder(5, ReminderType.push)]);
+    });
+
     test('normalize sorts earliest alert first and removes duplicates', () {
       final list = Reminder.normalize(const [
         Reminder(10, ReminderType.push),
@@ -176,6 +205,29 @@ void main() {
       expect(back.reminders, const [Reminder(-540, ReminderType.push)]);
     });
 
+    test('alarms TimeFix cannot model are kept verbatim', () {
+      const ics = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\n'
+          'DTSTART:20261110T090000Z\r\nDTEND:20261110T100000Z\r\nRRULE:FREQ=WEEKLY;COUNT=4\r\nSUMMARY:x\r\n'
+          'BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:x\r\nEND:VALARM\r\n'
+          'BEGIN:VALARM\r\nACTION:EMAIL\r\nTRIGGER:-P1D\r\nSUMMARY:mail\r\nATTENDEE:mailto:a@b.c\r\nEND:VALARM\r\n'
+          'BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER;VALUE=DATE-TIME:20261110T085000Z\r\nDESCRIPTION:once\r\nEND:VALARM\r\n'
+          'BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-P6W\r\nDESCRIPTION:far\r\nEND:VALARM\r\n'
+          'END:VEVENT\r\nEND:VCALENDAR\r\n';
+      final e = IcalService.toEvents(IcsParser().parse(ics), 'c', includeReminders: true).single;
+      expect(e.reminders, const [Reminder(15, ReminderType.push)]);
+      expect(e.extraAlarms, hasLength(3));
+      final out = IcsWriter.resource([e]);
+      expect('BEGIN:VALARM'.allMatches(out), hasLength(4));
+      expect(out, contains('ACTION:EMAIL'));
+      expect(out, contains('ATTENDEE:mailto:a@b.c'));
+      expect(out, contains('TRIGGER;VALUE=DATE-TIME:20261110T085000Z'));
+      expect(out, contains('TRIGGER:-P6W'));
+      // And they survive another round trip.
+      final again = IcalService.toEvents(IcsParser().parse(out), 'c', includeReminders: true).single;
+      expect(again.reminders, e.reminders);
+      expect(again.extraAlarms, hasLength(3));
+    });
+
     test('alarms written by other clients', () {
       const ics = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\n'
           'DTSTART:20261110T090000Z\r\nDTEND:20261110T100000Z\r\nSUMMARY:x\r\n'
@@ -208,6 +260,25 @@ void main() {
           GoogleMapper.fromGoogle(ge, 'c', calendarDefaults: const [Reminder(30, ReminderType.push)])!
               .reminders,
           const [Reminder(30, ReminderType.push)]);
+      // The calendar defaults are those of timed events, not all-day ones.
+      ge
+        ..start = gcal.EventDateTime(date: DateTime(2026, 11, 11))
+        ..end = gcal.EventDateTime(date: DateTime(2026, 11, 12));
+      expect(
+          GoogleMapper.fromGoogle(ge, 'c', calendarDefaults: const [Reminder(30, ReminderType.push)])!
+              .reminders,
+          isEmpty);
+    });
+
+    test('reminders are sent to Google only when asked, keeping useDefault', () {
+      final e = event(reminders: const [Reminder(30, ReminderType.push), Reminder(5, ReminderType.alarm)]);
+      expect(GoogleMapper.toGoogle(e, includeReminders: false).reminders, isNull);
+      final withDefaults =
+          GoogleMapper.toGoogle(e, calendarDefaults: const [Reminder(30, ReminderType.push)]).reminders!;
+      expect(withDefaults.useDefault, isTrue);
+      expect(GoogleMapper.sameGoogleReminders(
+          const [Reminder(30, ReminderType.push), Reminder(5, ReminderType.alarm)],
+          const [Reminder(30, ReminderType.push)]), isTrue);
     });
 
     test('only notifications Google can store are sent, the rest stays local', () {
@@ -220,8 +291,8 @@ void main() {
       expect(split.synced, const [Reminder(30, ReminderType.push)]);
       expect(split.local, const [
         Reminder(60, ReminderType.alarm),
-        Reminder(-540, ReminderType.push),
         Reminder(10, ReminderType.fullScreen),
+        Reminder(-540, ReminderType.push),
       ]);
       final g = GoogleMapper.toGoogle(event(reminders: const [
         Reminder(30, ReminderType.push),

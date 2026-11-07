@@ -46,8 +46,20 @@ class Reminder implements Comparable<Reminder> {
   final int minutesBefore;
   final ReminderType type;
 
-  DateTime fireTime(DateTime eventStart) =>
-      eventStart.subtract(Duration(minutes: minutesBefore));
+  /// When the alert fires, in wall-clock time so that DST changes do not
+  /// shift it: all-day delays are "N days before at HH:MM", and whole days
+  /// of a timed delay are calendar days (like RFC 5545 nominal days).
+  DateTime fireTime(DateTime eventStart, {bool allDay = false}) {
+    if (allDay) {
+      final p = allDayDelayParts(minutesBefore);
+      return DateTime(eventStart.year, eventStart.month, eventStart.day - p.daysBefore, p.hour, p.minute);
+    }
+    final days = minutesBefore ~/ (24 * 60); // truncates toward zero
+    final rest = minutesBefore - days * 24 * 60;
+    final shifted = DateTime(eventStart.year, eventStart.month, eventStart.day - days, eventStart.hour,
+        eventStart.minute, eventStart.second, eventStart.millisecond);
+    return shifted.subtract(Duration(minutes: rest));
+  }
 
   Map<String, Object> toJson() => {'m': minutesBefore, 't': type.name};
 

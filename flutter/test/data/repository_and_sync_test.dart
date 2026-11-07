@@ -94,6 +94,8 @@ void main() {
                 'start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL, all_day INTEGER NOT NULL DEFAULT 0, '
                 'time_zone TEXT, rrule TEXT, exdates TEXT, color INTEGER, updated_at INTEGER)');
             await db.insert('sources', {'id': 's', 'type': 'local', 'name': 'Local'});
+            await db.insert('sources', {'id': 'dav', 'type': 'caldav', 'name': 'Dav'});
+            await db.insert('calendars', {'id': 'davcal', 'source_id': 'dav', 'name': 'D', 'color': 0xFF000000});
             await db.insert('calendars', {'id': 'c', 'source_id': 's', 'name': 'Cal', 'color': 0xFF000000});
             await db.insert('events', {'id': 'old', 'calendar_id': 'c', 'title': 'Ancien',
               'start_ms': 0, 'end_ms': 3600000});
@@ -101,14 +103,29 @@ void main() {
         ));
     await v1.close();
 
+    // Pretend a v2 sync stored a ctag (the v2 migration adds the column).
+    final v2 = await databaseFactoryFfi.openDatabase(path);
+    await v2.execute('ALTER TABLE calendars ADD COLUMN sync_token TEXT');
+    await v2.execute("UPDATE calendars SET sync_token = 'ctag-1'");
+    await v2.execute('ALTER TABLE sources ADD COLUMN username TEXT');
+    await v2.execute('ALTER TABLE events ADD COLUMN href TEXT');
+    await v2.execute('ALTER TABLE events ADD COLUMN etag TEXT');
+    await v2.execute('ALTER TABLE events ADD COLUMN recurrence_id INTEGER');
+    await v2.execute('CREATE INDEX idx_events_href ON events(href)');
+    await v2.setVersion(2);
+    await v2.close();
+
     final migrated = await SqliteCalendarRepository.open(factory: databaseFactoryFfi, path: path);
+    // v3: CalDAV calendars are downloaded again (to get their VALARMs).
+    expect((await migrated.getCalendar('davcal'))!.syncToken, isNull);
+    expect((await migrated.getCalendar('c'))!.syncToken, 'ctag-1');
     expect((await migrated.getEvent('old'))!.title, 'Ancien');
     await migrated.upsertEvent((await migrated.getEvent('old'))!
         .copyWith(href: 'https://x/a.ics', etag: '"e"', recurrenceId: DateTime(2026)));
     final back = (await migrated.getEvent('old'))!;
     expect((back.href, back.etag, back.recurrenceId), ('https://x/a.ics', '"e"', DateTime(2026)));
-    await migrated.upsertCalendar((await migrated.getCalendar('c'))!.copyWith(syncToken: 'ctag-1'));
-    expect((await migrated.getCalendar('c'))!.syncToken, 'ctag-1');
+    await migrated.upsertEvent((await migrated.getEvent('old'))!.copyWith(extraAlarms: const ['BEGIN:VALARM\r\nACTION:EMAIL\r\nEND:VALARM']));
+    expect((await migrated.getEvent('old'))!.extraAlarms.single, contains('EMAIL'));
     expect(await migrated.eventsByHref('c', 'https://x/a.ics'), hasLength(1));
     // v3: reminders.
     await migrated.upsertEvent((await migrated.getEvent('old'))!
@@ -116,6 +133,8 @@ void main() {
     expect((await migrated.getEvent('old'))!.reminders, const [Reminder(10, ReminderType.alarm)]);
     await migrated.setLocalReminders('ro|1', const [Reminder(30, ReminderType.push)]);
     expect(await migrated.localReminders(), {'ro|1': const [Reminder(30, ReminderType.push)]});
+    await migrated.setLocalReminders('ro|1', const [], keepEmpty: true);
+    expect(await migrated.localReminders(), {'ro|1': const <Reminder>[]});
     await migrated.setLocalReminders('ro|1', const []);
     expect(await migrated.localReminders(), isEmpty);
     await migrated.close();

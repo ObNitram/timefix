@@ -42,6 +42,7 @@ class AlarmRingScreen extends StatefulWidget {
     required this.onSnooze,
     this.onOpenEvent,
     this.isStillRinging,
+    this.onShown,
   });
 
   final RingingReminder reminder;
@@ -51,9 +52,13 @@ class AlarmRingScreen extends StatefulWidget {
   final Future<void> Function() onSnooze;
   final Future<void> Function()? onOpenEvent;
 
-  /// Polled every second: when it returns false (alarm stopped from the
-  /// notification, or auto-stopped), the screen closes by itself.
-  final Future<bool> Function()? isStillRinging;
+  /// Polled every second. Once it has returned true, a false means the alarm
+  /// was stopped elsewhere (notification, watch, auto-stop) and the screen
+  /// closes by itself. Null means "unknown".
+  final Future<bool?> Function()? isStillRinging;
+
+  /// Called once the screen is displayed.
+  final VoidCallback? onShown;
 
   /// Route result when the user chose to open the event.
   static const openedEvent = 'open';
@@ -68,6 +73,7 @@ class _AlarmRingScreenState extends State<AlarmRingScreen> with SingleTickerProv
   Timer? _clock;
   Timer? _autoStop;
   bool _closing = false;
+  bool _seenRinging = false;
 
   bool get _isAlarm => widget.reminder.type == ReminderType.alarm;
 
@@ -78,8 +84,17 @@ class _AlarmRingScreenState extends State<AlarmRingScreen> with SingleTickerProv
       if (!mounted) return;
       setState(() {});
       final check = widget.isStillRinging;
-      if (check != null && !_closing && !await check()) _close(() async {});
+      if (check == null || _closing) return;
+      // The system notification may be posted slightly after this screen
+      // opens: only a ringing alarm that stopped closes the screen.
+      final ringing = await check();
+      if (ringing == true) {
+        _seenRinging = true;
+      } else if (ringing == false && _seenRinging && mounted) {
+        _close(() async {});
+      }
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => widget.onShown?.call());
     _autoStop = Timer(widget.autoStop, () => _close(widget.onStop));
     if (_isAlarm) HapticFeedback.heavyImpact();
   }

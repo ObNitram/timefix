@@ -61,14 +61,30 @@ class GoogleMapper {
       // are never stored. The rule is kept only when present.
       rrule: rrule,
       color: colorForGoogleEventColorId(e.colorId),
+      // The calendar defaults returned by the API are those of timed events;
+      // all-day defaults are not exposed.
       reminders: (e.reminders?.useDefault ?? false)
-          ? calendarDefaults
+          ? (allDay ? const <Reminder>[] : calendarDefaults)
           : remindersFrom(e.reminders?.overrides),
       updatedAt: e.updated?.toLocal(),
     );
   }
 
-  static gcal.Event toGoogle(CalendarEvent e, {bool includeRecurrence = true}) {
+  /// The part of [reminders] Google stores (popups, at most 5).
+  static List<Reminder> googlePart(List<Reminder> reminders) =>
+      Reminder.normalize(reminders.where(isGoogleReminder)).take(5).toList();
+
+  static bool sameGoogleReminders(List<Reminder> a, List<Reminder> b) {
+    final x = googlePart(a), y = googlePart(b);
+    return x.length == y.length && [for (var i = 0; i < x.length; i++) x[i] == y[i]].every((v) => v);
+  }
+
+  /// [includeReminders]: false leaves the event's reminders untouched on the
+  /// server (a PATCH replaces the whole reminders object, including e-mail
+  /// reminders TimeFix does not know). [calendarDefaults] lets an event that
+  /// uses exactly the calendar defaults keep `useDefault`.
+  static gcal.Event toGoogle(CalendarEvent e,
+      {bool includeRecurrence = true, bool includeReminders = true, List<Reminder>? calendarDefaults}) {
     final tzName = e.timeZone ?? deviceTimeZoneName ?? 'UTC';
     final event = gcal.Event()
       ..summary = e.title
@@ -87,13 +103,18 @@ class GoogleMapper {
     if (includeRecurrence && e.isRecurring) {
       event.recurrence = ['RRULE:${e.rrule}'];
     }
-    event.reminders = gcal.EventReminders(
-      useDefault: false,
-      overrides: [
-        for (final r in e.reminders.where(isGoogleReminder).take(5))
-          gcal.EventReminder(method: 'popup', minutes: r.minutesBefore),
-      ],
-    );
+    if (includeReminders) {
+      final popups = googlePart(e.reminders);
+      final useDefault = !e.allDay &&
+          calendarDefaults != null &&
+          calendarDefaults.isNotEmpty &&
+          sameGoogleReminders(popups, calendarDefaults);
+      event.reminders = useDefault
+          ? gcal.EventReminders(useDefault: true)
+          : gcal.EventReminders(useDefault: false, overrides: [
+              for (final r in popups) gcal.EventReminder(method: 'popup', minutes: r.minutesBefore),
+            ]);
+    }
     return event;
   }
 }

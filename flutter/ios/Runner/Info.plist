@@ -17,7 +17,7 @@
 		<true/>
 	</dict>
 	<key>NSAlarmKitUsageDescription</key>
-	<string>TimeFix fait sonner les rappels de type « Alarme » comme un réveil.</string>
+	<string>TimeFix fait sonner vos rappels « Alarme » comme un réveil. / TimeFix rings your “Alarm” reminders like an alarm clock.</string>
 	<key>CFBundleDisplayName</key>
 	<string>TimeFix</string>
 	<key>CFBundleExecutable</key>

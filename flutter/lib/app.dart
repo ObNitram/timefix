@@ -120,6 +120,12 @@ class _BootstrapState extends ConsumerState<_Bootstrap> with WidgetsBindingObser
         WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed;
     final service = ref.read(reminderServiceProvider);
     final alert = response.alert;
+    // On Android any app can send the launch intent with a made-up payload:
+    // act only on alerts this app scheduled or that are really displayed.
+    if (!service.isKnownAlert(alert.id) &&
+        await ref.read(reminderPlatformProvider).isRinging(alert.id) != true) {
+      return;
+    }
     switch (response.action) {
       case ReminderAction.stop:
         await service.stop(alert);
@@ -163,6 +169,7 @@ class _BootstrapState extends ConsumerState<_Bootstrap> with WidgetsBindingObser
             onOpenEvent: alert.eventId == 'test' ? null : () => _openEvent(alert),
             isStillRinging:
                 alert.type == ReminderType.alarm ? () => platform.isRinging(alert.id) : null,
+            onShown: platform.enterRing,
           ),
         ))
         .then((result) {

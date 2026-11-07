@@ -4,11 +4,14 @@ import '../../domain/reminders.dart';
 
 /// A property line of an iCalendar file: `NAME;PARAM=VALUE:value`.
 class IcsProperty {
-  IcsProperty(this.name, this.params, this.value);
+  IcsProperty(this.name, this.params, this.value, [this.raw]);
 
   final String name;
   final Map<String, String> params;
   final String value;
+
+  /// The unfolded content line, to write it back unchanged.
+  final String? raw;
 
   String? param(String key) => params[key];
 }
@@ -31,6 +34,7 @@ class IcsEvent {
     this.lastModified,
     this.color,
     this.reminders = const [],
+    this.extraAlarms = const [],
   });
 
   final String uid;
@@ -54,6 +58,9 @@ class IcsEvent {
 
   /// VALARMs with a usable trigger, converted to reminders.
   final List<Reminder> reminders;
+
+  /// Other VALARM blocks, verbatim (CRLF-separated unfolded lines).
+  final List<String> extraAlarms;
 }
 
 class IcsCalendar {
@@ -216,16 +223,21 @@ class IcsParser {
           lastModProp == null ? null : parseDateValue(lastModProp, null)?.value,
       color: get('X-TIMEFIX-COLOR')?.value ?? get('COLOR')?.value,
       reminders: Reminder.normalize([
-        for (final a in alarms) ?_reminder(a, startParsed.value, end, calLocation),
+        for (final a in alarms) ?_reminder(a, startParsed.value, end, calLocation, rruleProp != null),
       ]),
+      extraAlarms: [
+        for (final a in alarms)
+          if (_reminder(a, startParsed.value, end, calLocation, rruleProp != null) == null)
+            ['BEGIN:VALARM', for (final p in a) p.raw ?? '${p.name}:${p.value}', 'END:VALARM'].join('\r\n'),
+      ],
     );
   }
 
   /// Converts a VALARM to a reminder. E-mail alarms and alarms without a
   /// usable trigger are ignored. Alarms written by other clients become
   /// standard notifications.
-  Reminder? _reminder(
-      List<IcsProperty> alarm, DateTime start, DateTime end, tz.Location? calLocation) {
+  Reminder? _reminder(List<IcsProperty> alarm, DateTime start, DateTime end,
+      tz.Location? calLocation, bool recurring) {
     IcsProperty? get(String name) {
       for (final p in alarm) {
         if (p.name == name) return p;
@@ -240,6 +252,8 @@ class IcsParser {
 
     int? minutesBefore;
     if (trigger.param('VALUE')?.toUpperCase() == 'DATE-TIME') {
+      // An absolute trigger fires once: it cannot be a per-occurrence delay.
+      if (recurring) return null;
       final at = parseDateValue(trigger, calLocation)?.value;
       if (at != null) minutesBefore = start.difference(at).inMinutes;
     } else {
@@ -347,6 +361,7 @@ class IcsParser {
     final value = line.substring(colon + 1);
     final segments = _splitOutsideQuotes(head, ';');
     final name = segments.first.trim().toUpperCase();
+    final raw = line;
     final params = <String, String>{};
     for (final seg in segments.skip(1)) {
       final eq = seg.indexOf('=');
@@ -357,7 +372,7 @@ class IcsParser {
       }
       params[seg.substring(0, eq).trim().toUpperCase()] = v;
     }
-    return IcsProperty(name, params, value);
+    return IcsProperty(name, params, value, raw);
   }
 
   static List<String> _splitOutsideQuotes(String s, String sep) {

@@ -166,7 +166,7 @@ void main() {
     await service.reschedule();
     expect(platform.scheduled, hasLength(3));
     final snoozeId = platform.scheduled.keys.firstWhere((id) => id != alert.id && id != 102);
-    expect(service.isKnownAlert(snoozeId), isTrue);
+    expect(await service.isKnownAlert(snoozeId), isTrue);
     expect(service.upcomingRinging.map((a) => a.id), contains(snoozeId));
 
     // The event is deleted: its snooze is cancelled too.
@@ -208,6 +208,14 @@ void main() {
     expect(platform.scheduled, hasLength(scheduled));
   });
 
+  test('a new process leaves alerts alone when they are still scheduled', () async {
+    await repo.upsertEvent(event('a', DateTime(2026, 11, 10, 14), const [Reminder(10, ReminderType.push)]));
+    await service.reschedule();
+    platform.scheduleCalls.clear();
+    await newService().reschedule();
+    expect(platform.scheduleCalls, isEmpty);
+  });
+
   test('a permission change schedules everything again', () async {
     await repo.upsertEvent(event('a', DateTime(2026, 11, 10, 14), const [Reminder(30, ReminderType.alarm)]));
     await service.reschedule();
@@ -247,9 +255,58 @@ void main() {
     await repo.upsertEvent(event('a', DateTime(2026, 11, 10, 14), const [Reminder(10, ReminderType.push)]));
     await service.reschedule();
     final id = platform.scheduled.values.first.id;
-    expect(service.isKnownAlert(id), isTrue);
-    expect(service.isKnownAlert(99999), isFalse);
-    expect(service.isKnownAlert(testAlertIds[ReminderType.alarm]!), isTrue);
+    expect(await service.isKnownAlert(id), isTrue);
+    expect(await service.isKnownAlert(99999), isFalse);
+    expect(await service.isKnownAlert(testAlertIds[ReminderType.alarm]!), isTrue);
+  });
+
+  test('delivered alerts stay known for a week after they fired', () async {
+    await repo.upsertEvent(event('a', DateTime(2026, 11, 10, 14), const [Reminder(10, ReminderType.push)]));
+    await service.reschedule();
+    final id = platform.scheduled.values.single.id;
+    // Fired at 13:50; the app reschedules (resume, sync) before the tap.
+    now = DateTime(2026, 11, 10, 13, 55);
+    await service.reschedule();
+    await newService().reschedule();
+    expect(await service.isKnownAlert(id), isTrue);
+    expect(platform.cancelCalls, isNot(contains(id)));
+    // A week later it is forgotten.
+    now = DateTime(2026, 11, 17, 14);
+    await service.reschedule();
+    expect(await service.isKnownAlert(id), isFalse);
+  });
+
+  test('snoozes made from a notification are tracked', () async {
+    await repo.upsertEvent(event('a', DateTime(2026, 11, 10, 14), const [Reminder(30, ReminderType.alarm)]));
+    await service.reschedule();
+    final alert = platform.scheduled.values.single;
+    // "Snooze" tapped on the notification while the app was not running.
+    final snoozed = alert.copyWith(id: 4242, fireAt: DateTime(2026, 11, 10, 13, 40));
+    platform.scheduled[snoozed.id] = snoozed;
+    platform.backgroundSnoozes.add(snoozed);
+    expect(await service.isKnownAlert(4242), isTrue);
+    await service.reschedule();
+    expect(service.upcomingRinging.map((a) => a.id), contains(4242));
+    // Its event is deleted: the snooze is cancelled with it.
+    await repo.deleteEvent('a');
+    await service.reschedule();
+    expect(platform.scheduled.containsKey(4242), isFalse);
+  });
+
+  test('changes of the upcoming ringing alerts are notified', () async {
+    var changes = 0;
+    service.upcomingRingingListenable.addListener(() => changes++);
+    await repo.upsertEvent(event('a', DateTime(2026, 11, 10, 14), const [Reminder(30, ReminderType.alarm)]));
+    await service.reschedule();
+    expect(changes, 1);
+    await service.snooze(platform.scheduled.values.single);
+    expect(changes, 2);
+    await service.scheduleTest(ReminderType.alarm, locale: const Locale('en'));
+    expect(changes, 3);
+    expect(service.upcomingRinging.first.id, testAlertIds[ReminderType.alarm]);
+    // A reschedule keeps the test alert that is still to come.
+    await service.reschedule();
+    expect(service.upcomingRinging.map((a) => a.id), contains(testAlertIds[ReminderType.alarm]));
   });
 
   test('device-only reminders are scheduled', () async {

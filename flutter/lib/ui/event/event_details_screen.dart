@@ -198,8 +198,11 @@ class _RemindersSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final key = localReminderKey(event);
-    final local = ref.watch(localRemindersProvider(key)).value ?? const <Reminder>[];
+    // The most specific entry wins (occurrence, then series), as for the
+    // alerts themselves.
+    final keys = deviceReminderKeys(event);
+    final stored = ref.watch(localRemindersProvider(keys.join('\n'))).value ?? const {};
+    final local = deviceReminders(event, stored);
     final all = Reminder.normalize([...event.reminders, ...local]);
     final muted = Theme.of(context).colorScheme.mutedText;
 
@@ -236,9 +239,22 @@ class _RemindersSection extends ConsumerWidget {
             readOnly: event.reminders,
             allDay: event.allDay,
             onChanged: (list) async {
-              await ref.read(repositoryProvider).setLocalReminders(key, list);
+              var wholeSeries = false;
+              // A modified occurrence of a series: this one or all of them?
+              if (keys.length > 1) {
+                final l10n = context.l10n;
+                final scope = await askRecurrenceScope(
+                  context,
+                  title: l10n.deviceRemindersScopeTitle,
+                  confirmLabel: l10n.ok,
+                  options: const [RecurrenceScope.thisEvent, RecurrenceScope.all],
+                );
+                if (scope == null) return;
+                wholeSeries = scope == RecurrenceScope.all;
+              }
+              await ref.read(eventServiceProvider).setDeviceReminders(event, list, wholeSeries: wholeSeries);
               ref.read(dataRevisionProvider.notifier).bump();
-              if (context.mounted) await ensureReminderPermissions(context, ref, list);
+              if (context.mounted) await ensureReminderPermissions(context, list);
             },
           ),
           Padding(

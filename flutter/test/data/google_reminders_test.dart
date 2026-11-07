@@ -75,7 +75,8 @@ void main() {
     final o = await occ('g1');
     expect(o.event.reminders, const [Reminder(10, ReminderType.push)]);
     await events.update(original: o, edited: o.event.copyWith(title: 'Renamed'));
-    expect(stored('g1').reminders, isNull, reason: 'PATCH without the reminders field');
+    expect(google.lastPatch!.reminders, isNull, reason: 'PATCH without the reminders field');
+    expect(stored('g1').reminders!.overrides!.map((r) => r.method), contains('email'));
   });
 
   test('changed reminders: popups to Google, alarms on the device after the patch', () async {
@@ -110,6 +111,32 @@ void main() {
     final local = await repo.localReminders();
     expect(effectiveReminders((await occ('S_1')).event, local), isEmpty);
     expect(effectiveReminders((await occ('S_2')).event, local), const [Reminder(10, ReminderType.alarm)]);
+  });
+
+  test('device-only reminders of a Google series can change for every occurrence', () async {
+    await repo.setLocalReminders('${cal.id}|series|S', const [Reminder(10, ReminderType.alarm)]);
+    // The 12th has its own list.
+    await repo.setLocalReminders((await occ('S_2')).event.id, const [Reminder(5, ReminderType.alarm)]);
+
+    // A title change leaves the device reminders alone (no own entry made).
+    final first = await occ('S_1');
+    // (The editor sends every reminder, the device-only ones included.)
+    await events.update(
+        original: first,
+        edited: first.event.copyWith(title: 'Gym', reminders: const [Reminder(10, ReminderType.alarm)]));
+    expect((await repo.localReminders()).containsKey(first.event.id), isFalse);
+
+    // The alarm is removed for the whole series.
+    await events.update(
+        original: await occ('S_1'),
+        edited: first.event.copyWith(title: 'Gym', reminders: const []),
+        deviceScope: RecurrenceScope.all);
+    final local = await repo.localReminders();
+    expect(local, isEmpty);
+    expect(effectiveReminders((await occ('S_2')).event, local), isEmpty);
+    // New instances entering the sync window follow too.
+    final later = first.event.copyWith(id: '${cal.id}|S_9', remoteId: 'S_9');
+    expect(effectiveReminders(later, local), isEmpty);
   });
 
   test('a single event that becomes recurring keeps its alarm for every instance', () async {

@@ -60,7 +60,12 @@ class _BootstrapState extends ConsumerState<_Bootstrap> with WidgetsBindingObser
   bool _started = false;
   Timer? _rescheduleDebounce;
   Timer? _foregroundRing;
-  int? _ringingId;
+  ReminderService? _service;
+
+  /// Alerts whose ringing screen is open (several can be stacked).
+  final Set<int> _ringingIds = {};
+  bool _ringLaunchedByAlert = false;
+  bool _ringOpenedEvent = false;
 
   @override
   void initState() {
@@ -71,19 +76,36 @@ class _BootstrapState extends ConsumerState<_Bootstrap> with WidgetsBindingObser
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _service?.upcomingRingingListenable.removeListener(_onUpcomingRingingChanged);
     _rescheduleDebounce?.cancel();
     _foregroundRing?.cancel();
     super.dispose();
+  }
+
+  /// Android pauses a resumed activity ("inactive") to deliver a
+  /// notification tap, and a pulled-down shade is "inactive" too: both are
+  /// the foreground. Null: not reported yet (app starting).
+  static bool _isForeground(AppLifecycleState? state) =>
+      state == null || state == AppLifecycleState.resumed || state == AppLifecycleState.inactive;
+
+  void _onUpcomingRingingChanged() {
+    if (mounted && _isForeground(WidgetsBinding.instance.lifecycleState)) _armForegroundRing();
   }
 
   /// While the app is open, shows the ringing screen when the next
   /// full-screen / alarm reminder fires.
   void _armForegroundRing() {
     _foregroundRing?.cancel();
-    final next = ref.read(reminderServiceProvider).upcomingRinging.firstOrNull;
+    final now = DateTime.now();
+    final next =
+        ref.read(reminderServiceProvider).upcomingRinging.where((a) => a.fireAt.isAfter(now)).firstOrNull;
     if (next == null) return;
-    final delay = next.fireAt.difference(DateTime.now());
-    if (delay.isNegative || delay > const Duration(hours: 12)) return;
+    final delay = next.fireAt.difference(now);
+    // Far away: look again later (the app may stay open, as a wall calendar).
+    if (delay > const Duration(hours: 12)) {
+      _foregroundRing = Timer(const Duration(hours: 12), _armForegroundRing);
+      return;
+    }
     _foregroundRing = Timer(delay, () {
       if (!mounted) return;
       _showRingScreen(next, launchedByAlert: false);
@@ -98,10 +120,8 @@ class _BootstrapState extends ConsumerState<_Bootstrap> with WidgetsBindingObser
     _rescheduleDebounce?.cancel();
     _rescheduleDebounce = Timer(const Duration(milliseconds: 800), () async {
       if (!mounted) return;
+      // The foreground ring is armed again when the upcoming alerts change.
       await ref.read(reminderServiceProvider).reschedule();
-      if (mounted && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
-        _armForegroundRing();
-      }
     });
   }
 
@@ -111,18 +131,16 @@ class _BootstrapState extends ConsumerState<_Bootstrap> with WidgetsBindingObser
     final launch = await platform.takeLaunchResponse();
     if (launch != null) _onReminderResponse(launch, launchedByAlert: true);
     await ref.read(reminderServiceProvider).reschedule();
-    _armForegroundRing();
   }
 
   Future<void> _onReminderResponse(ReminderResponse response, {bool? launchedByAlert}) async {
     // Opened from the lock screen / another app: go back there afterwards.
-    final background = launchedByAlert ??
-        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed;
+    final background = launchedByAlert ?? !_isForeground(WidgetsBinding.instance.lifecycleState);
     final service = ref.read(reminderServiceProvider);
     final alert = response.alert;
     // On Android any app can send the launch intent with a made-up payload:
     // act only on alerts this app scheduled or that are really displayed.
-    if (!service.isKnownAlert(alert.id) &&
+    if (!await service.isKnownAlert(alert.id) &&
         await ref.read(reminderPlatformProvider).isRinging(alert.id) != true) {
       return;
     }
@@ -143,11 +161,17 @@ class _BootstrapState extends ConsumerState<_Bootstrap> with WidgetsBindingObser
 
   void _showRingScreen(ReminderAlert alert, {required bool launchedByAlert}) {
     final navigator = appNavigatorKey.currentState;
-    if (navigator == null || _ringingId == alert.id) return;
-    _ringingId = alert.id;
+    final platform = ref.read(reminderPlatformProvider);
+    if (navigator == null) return;
+    if (_ringingIds.contains(alert.id)) {
+      // Already displayed (opened in the app, then the notification tapped).
+      platform.enterRing();
+      return;
+    }
+    _ringingIds.add(alert.id);
+    if (launchedByAlert) _ringLaunchedByAlert = true;
     final settings = ref.read(reminderSettingsProvider);
     final service = ref.read(reminderServiceProvider);
-    final platform = ref.read(reminderPlatformProvider);
     navigator
         .push(MaterialPageRoute<String>(
           fullscreenDialog: true,
@@ -173,10 +197,15 @@ class _BootstrapState extends ConsumerState<_Bootstrap> with WidgetsBindingObser
           ),
         ))
         .then((result) {
-      _ringingId = null;
+      _ringingIds.remove(alert.id);
+      if (result == AlarmRingScreen.openedEvent) _ringOpenedEvent = true;
+      if (_ringingIds.isNotEmpty) return;
       // Back to the lock screen / previous app, unless the user went on to
       // the event.
-      platform.leaveRing(background: launchedByAlert && result != AlarmRingScreen.openedEvent);
+      final background = _ringLaunchedByAlert && !_ringOpenedEvent;
+      _ringLaunchedByAlert = false;
+      _ringOpenedEvent = false;
+      platform.leaveRing(background: background);
     });
   }
 
@@ -203,6 +232,9 @@ class _BootstrapState extends ConsumerState<_Bootstrap> with WidgetsBindingObser
     // Any change to events, calendars or reminder settings reschedules alerts.
     ref.listenManual(dataRevisionProvider, (_, _) => _scheduleReminders());
     ref.listenManual(reminderSettingsProvider, (_, _) => _scheduleReminders());
+    final service = ref.read(reminderServiceProvider);
+    service.upcomingRingingListenable.addListener(_onUpcomingRingingChanged);
+    _service = service;
     Future(() async {
       await ref.read(syncServiceProvider).ensureLocalCalendar(name);
       ref.read(dataRevisionProvider.notifier).bump();

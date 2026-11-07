@@ -792,6 +792,10 @@ class AppLocalizationsFr extends AppLocalizations {
       'Rappels enregistrés sur cet appareil uniquement.';
 
   @override
+  String get deviceRemindersScopeTitle =>
+      'Appliquer les rappels de cet appareil à';
+
+  @override
   String snoozedUntil(String time) {
     return 'Répété à $time';
   }

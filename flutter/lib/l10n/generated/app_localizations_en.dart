@@ -790,6 +790,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get remindersDeviceOnly => 'Reminders saved on this device only.';
 
   @override
+  String get deviceRemindersScopeTitle => 'Apply this device\'s reminders to';
+
+  @override
   String snoozedUntil(String time) {
     return 'Snoozed until $time';
   }

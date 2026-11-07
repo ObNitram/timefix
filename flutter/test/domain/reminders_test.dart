@@ -65,6 +65,33 @@ void main() {
       expect(const Reminder(15, ReminderType.push).fireTime(timed), DateTime(2026, 10, 26, 8, 15));
     });
 
+    test('reminders under a day keep the instant (hour repeated when DST ends)', () {
+      // In Europe/Paris 02:30 happens twice on 25 October 2026; the second
+      // one is 01:30Z. Meaningful when run with TZ=Europe/Paris.
+      final second = DateTime.utc(2026, 10, 25, 1, 30).toLocal();
+      expect(const Reminder(10, ReminderType.push).fireTime(second).toUtc(), DateTime.utc(2026, 10, 25, 1, 20));
+      expect(const Reminder(0, ReminderType.alarm).fireTime(second).toUtc(), DateTime.utc(2026, 10, 25, 1, 30));
+    });
+
+    test('switching all-day on or off converts the delays', () {
+      expect(
+          convertRemindersForAllDay(const [
+            Reminder(10, ReminderType.push),
+            Reminder(24 * 60, ReminderType.alarm),
+            Reminder(-5, ReminderType.push),
+          ], toAllDay: true),
+          [
+            Reminder(allDayDelay(daysBefore: 1, hour: 9, minute: 0), ReminderType.alarm),
+            Reminder(allDayDelay(daysBefore: 0, hour: 9, minute: 0), ReminderType.push),
+          ]);
+      expect(
+          convertRemindersForAllDay([
+            Reminder(allDayDelay(daysBefore: 0, hour: 9, minute: 0), ReminderType.push),
+            Reminder(allDayDelay(daysBefore: 2, hour: 18, minute: 0), ReminderType.fullScreen),
+          ], toAllDay: false),
+          const [Reminder(2 * 24 * 60, ReminderType.fullScreen), Reminder(0, ReminderType.push)]);
+    });
+
     test('device-only reminders: occurrence entry, then series, then iCal master', () {
       final instance = event(id: 'c|inst1', recurringRemoteId: 'S');
       expect(deviceReminderKeys(instance), ['c|inst1', 'c|series|S']);

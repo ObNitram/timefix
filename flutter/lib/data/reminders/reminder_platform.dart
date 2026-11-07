@@ -219,6 +219,15 @@ abstract class ReminderPlatform {
   /// Null when the platform cannot tell.
   Future<bool?> isRinging(int id);
 
+  /// Whether the pending alerts [ids] are still scheduled on the device
+  /// (alarms are dropped when the app is force-stopped). Null when the
+  /// platform cannot tell.
+  Future<bool?> areScheduled(List<int> ids);
+
+  /// Snoozes made from a notification while the app was not running; each
+  /// is returned once.
+  Future<List<ReminderAlert>> takeBackgroundSnoozes();
+
   /// Called once the ringing screen is displayed: the app may then show over
   /// the lock screen (and only then).
   Future<void> enterRing();
@@ -229,8 +238,10 @@ abstract class ReminderPlatform {
 
   Future<Map<ReminderPermission, PermissionState>> permissions();
 
-  /// Asks for a permission (may open the system settings).
-  Future<void> request(ReminderPermission permission);
+  /// Asks for a permission. Permissions without a system dialog open their
+  /// system settings page; a refused one opens the app's settings only when
+  /// [openSettingsIfDenied] (an explicit "Grant" tap).
+  Future<void> request(ReminderPermission permission, {bool openSettingsIfDenied = false});
 }
 
 /// In-memory implementation (tests, unsupported platforms).
@@ -284,6 +295,19 @@ class FakeReminderPlatform implements ReminderPlatform {
   @override
   Future<void> stop(int id) async => stopped.add(id);
 
+  @override
+  Future<bool?> areScheduled(List<int> ids) async => ids.every(scheduled.containsKey);
+
+  /// Snoozes "made from a notification".
+  final List<ReminderAlert> backgroundSnoozes = [];
+
+  @override
+  Future<List<ReminderAlert>> takeBackgroundSnoozes() async {
+    final taken = [...backgroundSnoozes];
+    backgroundSnoozes.clear();
+    return taken;
+  }
+
   /// Ids currently "displayed" (null: the fake cannot tell).
   Set<int>? displayed;
 
@@ -292,13 +316,27 @@ class FakeReminderPlatform implements ReminderPlatform {
 
   int leftRing = 0;
 
+  /// `background` of each [leaveRing] call.
+  final List<bool> leftRingBackground = [];
+
   @override
-  Future<void> leaveRing({required bool background}) async => leftRing++;
+  Future<void> leaveRing({required bool background}) async {
+    leftRing++;
+    leftRingBackground.add(background);
+  }
 
   @override
   Future<Map<ReminderPermission, PermissionState>> permissions() async => Map.of(granted);
 
+  /// Requests made, with their `openSettingsIfDenied` flag.
+  final List<(ReminderPermission, bool)> requests = [];
+
+  /// Whether a request grants the permission (the user taps "Allow").
+  bool grantOnRequest = true;
+
   @override
-  Future<void> request(ReminderPermission permission) async =>
-      granted[permission] = PermissionState.granted;
+  Future<void> request(ReminderPermission permission, {bool openSettingsIfDenied = false}) async {
+    requests.add((permission, openSettingsIfDenied));
+    if (grantOnRequest) granted[permission] = PermissionState.granted;
+  }
 }

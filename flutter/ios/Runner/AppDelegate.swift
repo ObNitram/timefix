@@ -21,5 +21,22 @@ import flutter_local_notifications
       GeneratedPluginRegistrant.register(with: registry)
     }
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    // "Grant" for AlarmKit: the "Alarms" switch is on the app's page of the
+    // Settings app.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "TimefixReminders") {
+      let channel = FlutterMethodChannel(name: "timefix/reminders", binaryMessenger: registrar.messenger())
+      channel.setMethodCallHandler { call, result in
+        switch call.method {
+        case "openAppSettings":
+          if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+          }
+          result(nil)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+    }
   }
 }

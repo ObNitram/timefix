@@ -308,6 +308,16 @@ class SqliteCalendarRepository implements CalendarRepository {
   }
 
   @override
+  Future<List<String>> seriesMemberIds(String calendarId, {String? recurringRemoteId, String? uid}) async {
+    if (recurringRemoteId == null && uid == null) return const [];
+    final rows = await _db.query('events',
+        columns: ['id'],
+        where: 'calendar_id = ? AND (recurring_remote_id = ? OR (remote_id = ? AND recurrence_id IS NOT NULL))',
+        whereArgs: [calendarId, recurringRemoteId, uid]);
+    return [for (final r in rows) r['id'] as String];
+  }
+
+  @override
   Future<List<CalendarEvent>> searchEvents(String query, Set<String> calendarIds,
       {int limit = 200}) async {
     if (calendarIds.isEmpty || query.trim().isEmpty) return const [];

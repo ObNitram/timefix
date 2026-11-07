@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:uuid/uuid.dart';
 
 import '../core/time_zone.dart';
@@ -60,6 +61,30 @@ class EventService {
     await repository.setLocalReminders(localReminderKey(stored), local);
   }
 
+  /// Stores [reminders] as the reminders kept on this device for [event].
+  /// For a member of a series (Google instance, modified occurrence),
+  /// [wholeSeries] applies them to every occurrence (occurrences with their
+  /// own list follow again); otherwise to this occurrence only, where an
+  /// empty list then means "none" rather than "same as the series".
+  Future<void> setDeviceReminders(CalendarEvent event, List<Reminder> reminders,
+      {bool wholeSeries = false}) async {
+    final keys = deviceReminderKeys(event);
+    final list = Reminder.normalize(reminders);
+    if (keys.length == 1) {
+      await repository.setLocalReminders(keys.single, list);
+    } else if (!wholeSeries) {
+      await repository.setLocalReminders(event.id, list, keepEmpty: true);
+    } else {
+      await repository.setLocalReminders(keys[1], list);
+      final members = await repository.seriesMemberIds(event.calendarId,
+          recurringRemoteId: event.recurringRemoteId,
+          uid: event.recurrenceId != null ? event.remoteId : null);
+      for (final id in {event.id, ...members}) {
+        await repository.setLocalReminders(id, const []);
+      }
+    }
+  }
+
   /// Creates a new event.
   Future<void> create(CalendarEvent event) async {
     final (cal, source) = await _calendarAndSource(event.calendarId);
@@ -94,10 +119,15 @@ class EventService {
 
   /// Saves [edited], the new version of the occurrence [original] of
   /// [original.event].
+  ///
+  /// For a Google instance (edited alone on Google), [deviceScope] says
+  /// whether a change of the reminders kept on this device applies to this
+  /// occurrence ([RecurrenceScope.thisEvent], the default) or to the series.
   Future<void> update({
     required EventOccurrence original,
     required CalendarEvent edited,
     RecurrenceScope scope = RecurrenceScope.all,
+    RecurrenceScope? deviceScope,
   }) async {
     final master = original.event;
     final (oldCal, oldSource) = await _calendarAndSource(master.calendarId);
@@ -138,8 +168,13 @@ class EventService {
             ));
         final local = splitGoogleReminders(edited.reminders).local;
         if (master.recurringRemoteId != null) {
-          // One occurrence edited alone: its own entry overrides the series.
-          await repository.setLocalReminders(master.id, local, keepEmpty: true);
+          // Written only when changed: an occurrence's own entry would hide
+          // later changes made for the whole series.
+          final stored = await repository.localReminders(deviceReminderKeys(master).toSet());
+          final current = Reminder.normalize(deviceReminders(master, stored));
+          if (deviceScope != null || !listEquals(current, local)) {
+            await setDeviceReminders(master, local, wholeSeries: deviceScope == RecurrenceScope.all);
+          }
         } else if (edited.isRecurring && !master.isPartOfSeries) {
           // A single event becomes a series: instances use the series key.
           await repository.setLocalReminders(master.id, const []);

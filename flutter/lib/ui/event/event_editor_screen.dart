@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -53,8 +54,21 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
   /// False until the user changes the reminders: new events then follow the
   /// default reminders of the all-day / timed mode.
   bool _remindersTouched = false;
+
+  /// Reminders before the last all-day switch and what they became, so that
+  /// switching back restores them.
+  List<Reminder>? _remindersBeforeSwitch;
+  List<Reminder>? _remindersAfterSwitch;
+
+  /// Reminders of a Google instance that only this device keeps, as loaded:
+  /// a change asks whether it applies to the whole series.
+  List<Reminder>? _deviceOnlyAtLoad;
+
   bool _dirty = false;
   bool _saving = false;
+
+  /// Id of a new event, chosen once so that saving twice cannot create two.
+  late final String _newEventId = ref.read(eventServiceProvider).newEventId();
 
   bool get _isNew => widget.occurrence == null;
   CalendarEvent? get _original => widget.occurrence?.event;
@@ -108,8 +122,10 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
   /// Adds the reminders kept on this device (e.g. Google alarms).
   Future<void> _loadDeviceReminders(CalendarEvent e) async {
     final local = await ref.read(repositoryProvider).localReminders(deviceReminderKeys(e).toSet());
-    if (!mounted || _remindersTouched || local.isEmpty) return;
-    setState(() => _reminders = effectiveReminders(e, local));
+    if (!mounted || _remindersTouched) return;
+    final effective = effectiveReminders(e, local);
+    _deviceOnlyAtLoad = EventService.splitGoogleReminders(effective).local;
+    if (local.isNotEmpty) setState(() => _reminders = effective);
   }
 
   void _update(VoidCallback fn) => setState(() {
@@ -165,9 +181,18 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
 
   void _toggleAllDay(bool value) {
     _update(() {
+      if (value == _allDay) return;
       _allDay = value;
       if (_isNew && !_remindersTouched) {
         _reminders = ref.read(reminderSettingsProvider).defaultsFor(allDay: value);
+      } else if (_remindersBeforeSwitch != null && listEquals(_reminders, _remindersAfterSwitch)) {
+        _reminders = _remindersBeforeSwitch!;
+        _remindersBeforeSwitch = _remindersAfterSwitch = null;
+      } else {
+        // The same delay means something else for all-day events (counted
+        // from midnight): convert it.
+        _remindersBeforeSwitch = _reminders;
+        _reminders = _remindersAfterSwitch = convertRemindersForAllDay(_reminders, toAllDay: value);
       }
       if (!value) {
         final now = DateTime.now();
@@ -247,7 +272,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
     final end = _allDay ? addDays(dateOnly(_end), 1) : _end;
     final base = _original ??
         CalendarEvent(
-          id: ref.read(eventServiceProvider).newEventId(),
+          id: _newEventId,
           calendarId: calendarId,
           title: '',
           start: start,
@@ -292,23 +317,41 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
       if (s == null) return;
       scope = s;
     }
+    RecurrenceScope? deviceScope;
+    final deviceOnlyAtLoad = _deviceOnlyAtLoad;
+    if (original?.recurringRemoteId != null &&
+        deviceOnlyAtLoad != null &&
+        edited.calendarId == original!.calendarId &&
+        !listEquals(EventService.splitGoogleReminders(edited.reminders).local, deviceOnlyAtLoad)) {
+      if (!mounted) return;
+      deviceScope = await askRecurrenceScope(
+        context,
+        title: l10n.deviceRemindersScopeTitle,
+        confirmLabel: l10n.ok,
+        options: const [RecurrenceScope.thisEvent, RecurrenceScope.all],
+      );
+      if (deviceScope == null) return;
+    }
     if (!mounted) return;
     setState(() => _saving = true);
     final ok = await runGuarded(context, () async {
       if (original == null) {
         await service.create(edited);
       } else {
-        await service.update(original: widget.occurrence!, edited: edited, scope: scope);
+        await service.update(
+            original: widget.occurrence!, edited: edited, scope: scope, deviceScope: deviceScope);
       }
       ref.read(dataRevisionProvider.notifier).bump();
     });
     if (!mounted) return;
-    setState(() => _saving = false);
-    if (ok) {
-      _dirty = false;
-      await ensureReminderPermissions(context, ref, edited.reminders);
-      if (mounted) Navigator.of(context).pop(true);
+    if (!ok) {
+      setState(() => _saving = false);
+      return;
     }
+    // Saving stays disabled until the editor is closed.
+    _dirty = false;
+    await ensureReminderPermissions(context, edited.reminders);
+    if (mounted) Navigator.of(context).pop(true);
   }
 
   Future<void> _confirmDiscard() async {

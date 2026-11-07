@@ -56,8 +56,13 @@ class Reminder implements Comparable<Reminder> {
     }
     final days = minutesBefore ~/ (24 * 60); // truncates toward zero
     final rest = minutesBefore - days * 24 * 60;
-    final shifted = DateTime(eventStart.year, eventStart.month, eventStart.day - days, eventStart.hour,
-        eventStart.minute, eventStart.second, eventStart.millisecond);
+    // Whole days keep the wall-clock time (across a DST change); otherwise
+    // the instant itself is used (two instants share the local time in the
+    // hour repeated when DST ends).
+    final shifted = days == 0
+        ? eventStart
+        : DateTime(eventStart.year, eventStart.month, eventStart.day - days, eventStart.hour,
+            eventStart.minute, eventStart.second, eventStart.millisecond);
     return shifted.subtract(Duration(minutes: rest));
   }
 
@@ -177,3 +182,19 @@ const builtInAllDayDelays = [-9 * 60, 7 * 60, 15 * 60, (24 + 15) * 60, (6 * 24 +
 
 int allDayDelay({required int daysBefore, required int hour, required int minute}) =>
     daysBefore * 24 * 60 - (hour * 60 + minute);
+
+/// [reminders] of an event switched to all-day ([toAllDay]) or back to timed,
+/// keeping their meaning as far as possible: "N minutes before" becomes "the
+/// same day / N whole days before at 9:00", and "N days before at HH:MM"
+/// becomes "N days before" the start.
+List<Reminder> convertRemindersForAllDay(Iterable<Reminder> reminders, {required bool toAllDay}) =>
+    Reminder.normalize([
+      for (final r in reminders)
+        Reminder(
+          toAllDay
+              ? allDayDelay(
+                  daysBefore: r.minutesBefore <= 0 ? 0 : r.minutesBefore ~/ (24 * 60), hour: 9, minute: 0)
+              : allDayDelayParts(r.minutesBefore).daysBefore.clamp(0, maxReminderMinutes ~/ (24 * 60)) * 24 * 60,
+          r.type,
+        ),
+    ]);

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:googleapis/calendar/v3.dart' as gcal;
@@ -44,13 +46,22 @@ class FakeGoogleGateway implements GoogleCalendarGateway {
     return event;
   }
 
+  /// Body of the last PATCH request.
+  gcal.Event? lastPatch;
+
   @override
   Future<gcal.Event> patchEvent(String calendarId, String eventId, gcal.Event event) async {
+    lastPatch = event;
     final list = events[calendarId]!;
     final i = list.indexWhere((e) => e.id == eventId);
-    event.id = eventId;
-    list[i] = event;
-    return event;
+    // PATCH: the fields sent replace the stored ones, the others are kept.
+    final merged = gcal.Event.fromJson({
+      ...jsonDecode(jsonEncode(list[i].toJson())) as Map<String, dynamic>,
+      ...jsonDecode(jsonEncode(event.toJson())) as Map<String, dynamic>,
+      'id': eventId,
+    });
+    list[i] = merged;
+    return merged;
   }
 
   @override

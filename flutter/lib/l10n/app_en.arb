@@ -203,6 +203,7 @@
   "channelAlarmDescription": "Reminders that ring like an alarm clock",
   "notificationStartsNow": "Starting now",
   "remindersDeviceOnly": "Reminders saved on this device only.",
+  "deviceRemindersScopeTitle": "Apply this device's reminders to",
   "snoozedUntil": "Snoozed until {time}",
   "alarmSnoozeShort": "Snooze",
   "notificationPermissionHint": "Allow notifications to receive your reminders.",

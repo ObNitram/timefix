@@ -245,4 +245,175 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('30 minutes avant'), findsOneWidget);
   });
+
+  ReminderAlert ringing(int id, String title, {ReminderType type = ReminderType.alarm}) {
+    final now = DateTime.now();
+    return ReminderAlert(
+        id: id, type: type, fireAt: now, title: title, body: '', eventId: 'test', start: now, end: now);
+  }
+
+  Future<void> showRing(WidgetTester tester, FakeReminderPlatform platform, ReminderAlert alert) async {
+    platform.respond(ReminderResponse(alert, ReminderAction.open));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
+  testWidgets('a ringing screen below another one closes without closing it', (tester) async {
+    await phone(tester);
+    final platform = FakeReminderPlatform()..displayed = {61, 62};
+    await tester.pumpWidget(await buildTestApp(repository: await seededRepository(), reminders: platform));
+    await settle(tester);
+    await showRing(tester, platform, ringing(61, 'Premier'));
+    await showRing(tester, platform, ringing(62, 'Second'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(AlarmRingScreen, skipOffstage: false), findsNWidgets(2));
+
+    // The first alarm is stopped from the notification shade.
+    platform.displayed = {62};
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(AlarmRingScreen, skipOffstage: false), findsOneWidget);
+    expect(find.text('Second'), findsOneWidget);
+    expect(platform.leftRing, 0, reason: 'still ringing on screen');
+
+    await tester.tap(find.text('Arrêter'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(AlarmRingScreen), findsNothing);
+    expect(platform.stopped, [62]);
+    expect(platform.leftRing, 1);
+  });
+
+  testWidgets('a tap delivered while the app is in use does not send it to the background', (tester) async {
+    await phone(tester);
+    final platform = FakeReminderPlatform()..displayed = {71};
+    await tester.pumpWidget(await buildTestApp(repository: await seededRepository(), reminders: platform));
+    await settle(tester);
+    // Android pauses the activity ("inactive") to deliver the tap.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await showRing(tester, platform, ringing(71, 'Heads-up'));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.tap(find.text('Arrêter'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(platform.leftRingBackground, [false]);
+  });
+
+  testWidgets('test alarms ring on screen while the app is open', (tester) async {
+    await phone(tester);
+    final platform = FakeReminderPlatform();
+    await tester.pumpWidget(await buildTestApp(repository: await seededRepository(), reminders: platform));
+    await settle(tester);
+    await tester.tap(find.byTooltip('Ouvrir le menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Paramètres'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rappels'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text("Tester l'alarme"), 200);
+    await tester.ensureVisible(find.text("Tester l'alarme"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Tester l'alarme"));
+    for (var i = 0; i < 7; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(find.byType(AlarmRingScreen), findsOneWidget);
+    await tester.tap(find.text('Arrêter'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+  });
+
+  testWidgets('a denied permission is asked once; the settings open only from "Autoriser"', (tester) async {
+    await phone(tester);
+    final repo = await seededRepository();
+    final platform = FakeReminderPlatform()
+      ..granted[ReminderPermission.notifications] = PermissionState.denied
+      ..grantOnRequest = false;
+    await tester.pumpWidget(await buildTestApp(repository: repo, reminders: platform));
+    await settle(tester);
+
+    Future<void> createEvent(String title) async {
+      await tester.tap(find.byTooltip('Nouvel événement'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, title);
+      await tester.tap(find.text('Enregistrer'));
+      await tester.pumpAndSettle();
+    }
+
+    await createEvent('Un'); // with the default "10 minutes before"
+    expect(platform.requests, [(ReminderPermission.notifications, false)]);
+    expect(find.text('Autorisez les notifications pour recevoir vos rappels.'), findsOneWidget);
+    ScaffoldMessenger.of(tester.element(find.byType(Scaffold).first)).hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+
+    await createEvent('Deux');
+    expect(platform.requests, hasLength(1), reason: 'no second system dialog');
+    await tester.tap(find.text('Autoriser'));
+    await tester.pumpAndSettle();
+    expect(platform.requests.last, (ReminderPermission.notifications, true));
+    expect((await repo.searchEvents('Deux', {'local:default'})), hasLength(1));
+  });
+
+  testWidgets('switching an event to all-day converts its reminders, and back', (tester) async {
+    await phone(tester);
+    final repo = await seededRepository();
+    final start = DateTime.now().add(const Duration(days: 1));
+    await repo.upsertEvent(CalendarEvent(
+      id: 'conv',
+      calendarId: 'local:default',
+      title: 'Conversion',
+      start: start,
+      end: start.add(const Duration(hours: 1)),
+      reminders: const [Reminder(10, ReminderType.push)],
+    ));
+    await tester.pumpWidget(await buildTestApp(repository: repo));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Conversion').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Modifier'));
+    await tester.pumpAndSettle();
+    expect(find.text('10 minutes avant'), findsOneWidget);
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Le jour même à 09:00'), findsOneWidget);
+    expect(find.text('10 minutes avant'), findsNothing);
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+    expect(find.text('10 minutes avant'), findsOneWidget);
+  });
+
+  testWidgets('a moved occurrence shows and edits the series device reminders', (tester) async {
+    await phone(tester);
+    final repo = await seededRepository();
+    await repo.upsertSource(const CalendarSource(id: 'ical:x', type: SourceType.ical, name: 'Cours'));
+    await repo.upsertCalendar(const CalendarInfo(
+        id: 'ical:x:main', sourceId: 'ical:x', name: 'Cours', color: Colors.teal, readOnly: true));
+    final day = addDays(dateOnly(DateTime.now()), 1);
+    final moved = DateTime(day.year, day.month, day.day, 14);
+    await repo.upsertEvent(CalendarEvent(
+        id: 'ical:x:main|u1|moved', calendarId: 'ical:x:main', remoteId: 'u1', title: 'Cours déplacé',
+        start: moved, end: moved.add(const Duration(hours: 1)), recurrenceId: DateTime(day.year, day.month, day.day, 10)));
+    // Alarm set for the whole series.
+    await repo.setLocalReminders('ical:x:main|u1', const [Reminder(45, ReminderType.alarm)]);
+    await tester.pumpWidget(await buildTestApp(repository: repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cours déplacé').first);
+    await tester.pumpAndSettle();
+    expect(find.text('45 minutes avant'), findsOneWidget);
+
+    // Removed for this occurrence only: an explicit empty entry.
+    await tester.tap(find.byTooltip('Supprimer'));
+    await tester.pumpAndSettle();
+    expect(find.text('Appliquer les rappels de cet appareil à'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(await repo.localReminders(), {
+      'ical:x:main|u1': const [Reminder(45, ReminderType.alarm)],
+      'ical:x:main|u1|moved': const <Reminder>[],
+    });
+    expect(find.text('45 minutes avant'), findsNothing);
+  });
 }

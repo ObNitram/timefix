@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show Color, Locale, PlatformDispatcher;
 
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,10 +34,11 @@ const sentinelAlertId = 104;
 ///   [ReminderPlatform.maxPending]); [reschedule] runs on every app start,
 ///   return to the foreground and data change.
 /// * Alerts whose time has passed are never cancelled: they may be ringing
-///   or waiting in the notification shade.
-/// * The first run of a process schedules everything again (alarms are lost
-///   on force-stop, restored backups contain stale state), as does any change
-///   of permissions; later runs only touch changed alerts.
+///   or waiting in the notification shade. They stay known for a week, so
+///   that tapping them still works.
+/// * The first run of a process schedules everything again when the saved
+///   alerts are no longer scheduled (force-stop, restored backup), as does
+///   any change of permissions; otherwise only changed alerts are touched.
 class ReminderService {
   ReminderService({
     required this.platform,
@@ -58,6 +60,10 @@ class ReminderService {
   static const _stateKey = 'scheduledReminders.v2';
   static const _permissionsKey = 'reminderPermissions';
   static const _snoozesKey = 'snoozedReminders';
+  static const _deliveredKey = 'deliveredReminders';
+
+  /// How long a delivered alert is still accepted when tapped.
+  static const deliveredFor = Duration(days: 7);
 
   Future<void>? _running;
   bool _again = false;
@@ -65,10 +71,21 @@ class ReminderService {
 
   Duration get planningHorizon => horizon ?? platform.planningHorizon;
 
-  /// Full-screen and alarm alerts still to come (planned and snoozed), so
-  /// the app can show the ringing screen itself while it is in the
-  /// foreground (the system gives no callback when a notification fires).
-  List<ReminderAlert> upcomingRinging = const [];
+  final _upcomingRinging = ValueNotifier<List<ReminderAlert>>(const []);
+
+  /// Full-screen and alarm alerts still to come (planned, snoozed and test
+  /// alerts, earliest first), so the app can show the ringing screen itself
+  /// while it is in the foreground (the system gives no callback when a
+  /// notification fires).
+  ValueListenable<List<ReminderAlert>> get upcomingRingingListenable => _upcomingRinging;
+  List<ReminderAlert> get upcomingRinging => _upcomingRinging.value;
+
+  void _setUpcomingRinging(Iterable<ReminderAlert> alerts) {
+    _upcomingRinging.value = [
+      for (final a in alerts)
+        if (a.type != ReminderType.push) a
+    ]..sort((a, b) => a.fireAt.compareTo(b.fireAt));
+  }
 
   AlarmOptions get alarmOptions {
     final s = settings();
@@ -174,7 +191,7 @@ class ReminderService {
     // between delivery mechanisms (AlarmKit / notification): redo everything.
     final perms = await platform.permissions();
     final fingerprint = ReminderPermission.values.map((p) => '${p.name}=${perms[p]?.name}').join(',');
-    final forceAll = full || prefs.getString(_permissionsKey) != fingerprint;
+    var forceAll = prefs.getString(_permissionsKey) != fingerprint;
 
     final until = now.add(planningHorizon);
     final calendars = {
@@ -191,6 +208,17 @@ class ReminderService {
     final occurrences = expandEvents(events, calendars, range);
     final local = await repository.localReminders();
     final snoozes = await _activeSnoozes(now);
+    final previous = _loadState();
+    if (full && !forceAll) {
+      // New process: the alarms are gone if the app was force-stopped or
+      // restored from a backup. Checking the next few is enough.
+      final pending = [
+        ...previous.entries.where((e) => e.value.fireAt > nowMs).map((e) => (id: e.key, at: e.value.fireAt)),
+        ...snoozes.map((a) => (id: a.id, at: a.fireAt.millisecondsSinceEpoch)),
+      ]..sort((a, b) => a.at.compareTo(b.at));
+      final probe = [for (final p in pending.take(10)) p.id];
+      forceAll = probe.isNotEmpty && await platform.areScheduled(probe) != true;
+    }
     // One slot for the sentinel, and the pending snoozes.
     final cap = (platform.maxPending - 1 - snoozes.length).clamp(0, platform.maxPending);
     final planned = planReminders(
@@ -235,10 +263,13 @@ class ReminderService {
       signatures[sentinelAlertId] = 'sentinel|${at.millisecondsSinceEpoch}|${l10n.localeName}';
     }
 
-    final previous = _loadState();
     final next = <int, ({String sig, int fireAt})>{
       for (final a in alerts) a.id: (sig: signatures[a.id]!, fireAt: a.fireAt.millisecondsSinceEpoch),
     };
+    await _addDelivered({
+      for (final e in previous.entries)
+        if (e.value.fireAt <= nowMs) e.key: e.value.fireAt
+    }, nowMs);
 
     // Cancel only alerts that are still pending; fired ones are left alone.
     final toCancel = [
@@ -258,10 +289,12 @@ class ReminderService {
     await _saveState(next);
     await prefs.setString(_permissionsKey, fingerprint);
 
-    upcomingRinging = [
-      ...alerts.where((a) => a.type != ReminderType.push),
-      ...snoozes.where((a) => a.type != ReminderType.push),
-    ]..sort((a, b) => a.fireAt.compareTo(b.fireAt));
+    // Test alerts are not planned: keep those still to come.
+    _setUpcomingRinging([
+      ...alerts,
+      ...snoozes,
+      ...upcomingRinging.where((a) => testAlertIds.containsValue(a.id) && a.fireAt.isAfter(now)),
+    ]);
   }
 
   Map<int, ({String sig, int fireAt})> _loadState() {
@@ -284,6 +317,27 @@ class ReminderService {
       jsonEncode({
         for (final e in state.entries) '${e.key}': {'s': e.value.sig, 'f': e.value.fireAt},
       }));
+
+  /// Alerts that fired in the last [deliveredFor]: id -> fire time (ms).
+  Map<int, int> _loadDelivered() {
+    try {
+      final raw = jsonDecode(prefs.getString(_deliveredKey) ?? '{}') as Map<String, dynamic>;
+      return {for (final e in raw.entries) int.parse(e.key): (e.value as num).toInt()};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> _addDelivered(Map<int, int> fired, int nowMs) async {
+    final delivered = _loadDelivered();
+    final before = delivered.length;
+    final oldest = nowMs - deliveredFor.inMilliseconds;
+    delivered
+      ..addAll(fired)
+      ..removeWhere((_, at) => at <= oldest);
+    if (fired.isEmpty && delivered.length == before) return;
+    await prefs.setString(_deliveredKey, jsonEncode({for (final e in delivered.entries) '${e.key}': e.value}));
+  }
 
   // ---------------------------------------------------------------------------
   // Snooze
@@ -309,13 +363,28 @@ class ReminderService {
           '${e.key}': {'a': e.value.toPayload(), 'f': e.value.fireAt.millisecondsSinceEpoch},
       }));
 
+  /// Snoozes, including those made from a notification while the app was
+  /// not running (recorded by the platform).
+  Future<Map<int, ReminderAlert>> _allSnoozes() async {
+    final snoozes = _loadSnoozes();
+    final background = await platform.takeBackgroundSnoozes();
+    if (background.isEmpty) return snoozes;
+    snoozes.addAll({for (final a in background) a.id: a});
+    await _saveSnoozes(snoozes);
+    return snoozes;
+  }
+
   /// Pending snoozes; those whose event was deleted are cancelled.
   Future<List<ReminderAlert>> _activeSnoozes(DateTime now) async {
-    final snoozes = _loadSnoozes();
+    final snoozes = await _allSnoozes();
     final keep = <int, ReminderAlert>{};
     final gone = <int>[];
+    final fired = <int, int>{};
     for (final e in snoozes.entries) {
-      if (!e.value.fireAt.isAfter(now)) continue; // fired: forget it
+      if (!e.value.fireAt.isAfter(now)) {
+        fired[e.key] = e.value.fireAt.millisecondsSinceEpoch;
+        continue;
+      }
       final eventId = e.value.eventId;
       final exists = eventId == 'test' || await repository.getEvent(eventId) != null;
       if (exists) {
@@ -325,6 +394,7 @@ class ReminderService {
       }
     }
     if (gone.isNotEmpty) await platform.cancel(gone);
+    await _addDelivered(fired, now.millisecondsSinceEpoch);
     if (keep.length != snoozes.length) await _saveSnoozes(keep);
     return keep.values.toList();
   }
@@ -336,22 +406,24 @@ class ReminderService {
     // Distinct id, tracked separately from planned alerts.
     final snoozed = alert.copyWith(id: stableNotificationId('snooze:${alert.id}'), fireAt: at);
     await platform.schedule(snoozed, alarmOptions);
-    final snoozes = _loadSnoozes()..[snoozed.id] = snoozed;
+    final snoozes = await _allSnoozes()
+      ..[snoozed.id] = snoozed;
     await _saveSnoozes(snoozes);
-    upcomingRinging = [...upcomingRinging, if (snoozed.type != ReminderType.push) snoozed]
-      ..sort((a, b) => a.fireAt.compareTo(b.fireAt));
+    _setUpcomingRinging([...upcomingRinging.where((a) => a.id != snoozed.id), snoozed]);
     return at;
   }
 
   Future<void> stop(ReminderAlert alert) => platform.stop(alert.id);
 
-  /// Whether [id] is an alert this app scheduled (responses carrying other
-  /// ids are ignored: on Android anyone can send the launch intent).
-  bool isKnownAlert(int id) =>
+  /// Whether [id] is an alert this app scheduled, still to come or delivered
+  /// in the last [deliveredFor] (responses carrying other ids are ignored: on
+  /// Android anyone can send the launch intent).
+  Future<bool> isKnownAlert(int id) async =>
       testAlertIds.containsValue(id) ||
       id == sentinelAlertId ||
       _loadState().containsKey(id) ||
-      _loadSnoozes().containsKey(id);
+      _loadDelivered().containsKey(id) ||
+      (await _allSnoozes()).containsKey(id);
 
   /// Delivers a sample alert of [type] in 5 seconds.
   Future<void> scheduleTest(ReminderType type, {Locale? locale}) async {
@@ -372,8 +444,6 @@ class ReminderService {
         .copyWith(id: testAlertIds[type], fireAt: now.add(const Duration(seconds: 5)));
     await platform.cancel([alert.id]);
     await platform.schedule(alert, alarmOptions);
-    if (type != ReminderType.push) {
-      upcomingRinging = [...upcomingRinging, alert]..sort((a, b) => a.fireAt.compareTo(b.fireAt));
-    }
+    _setUpcomingRinging([...upcomingRinging.where((a) => a.id != alert.id), alert]);
   }
 }

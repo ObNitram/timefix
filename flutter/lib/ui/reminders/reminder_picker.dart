@@ -159,6 +159,10 @@ class _CustomDelayDialogState extends State<_CustomDelayDialog> {
   var _unit = _Unit.minutes;
   var _time = const TimeOfDay(hour: 9, minute: 0);
 
+  /// Timed reminder after the start (imported, e.g. a CalDAV "PT5M"
+  /// trigger): kept as such, the preview below says so.
+  var _afterStart = false;
+
   static const _unitMinutes = {
     _Unit.minutes: 1,
     _Unit.hours: 60,
@@ -175,6 +179,7 @@ class _CustomDelayDialogState extends State<_CustomDelayDialog> {
       _amount.text = '${parts.daysBefore < 0 ? 0 : parts.daysBefore}';
       _time = TimeOfDay(hour: parts.hour, minute: parts.minute);
     } else {
+      _afterStart = initial != null && initial < 0;
       final m = (initial ?? 30).abs();
       _unit = _Unit.values.reversed.firstWhere((u) => m > 0 && m % _unitMinutes[u]! == 0,
           orElse: () => _Unit.minutes);
@@ -193,7 +198,7 @@ class _CustomDelayDialogState extends State<_CustomDelayDialog> {
     if (n == null || n < 0) return null;
     final minutes = widget.allDay
         ? allDayDelay(daysBefore: n, hour: _time.hour, minute: _time.minute)
-        : n * _unitMinutes[_unit]!;
+        : n * _unitMinutes[_unit]! * (_afterStart ? -1 : 1);
     return minutes.abs() <= maxReminderMinutes ? minutes : null;
   }
 

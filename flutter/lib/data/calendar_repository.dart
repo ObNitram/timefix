@@ -42,6 +42,11 @@ abstract class CalendarRepository {
   /// overrides the series, for one occurrence).
   Future<void> setLocalReminders(String key, List<Reminder> reminders, {bool keepEmpty = false});
 
+  /// Ids of the stored members of a series in [calendarId]: Google instances
+  /// sharing [recurringRemoteId], or modified occurrences of the iCalendar
+  /// [uid].
+  Future<List<String>> seriesMemberIds(String calendarId, {String? recurringRemoteId, String? uid});
+
   /// Events whose title, location or description contains [query].
   Future<List<CalendarEvent>> searchEvents(String query, Set<String> calendarIds,
       {int limit = 200});
@@ -143,6 +148,15 @@ class InMemoryCalendarRepository implements CalendarRepository {
   @override
   Future<List<CalendarEvent>> eventsByHref(String calendarId, String href) async =>
       _events.values.where((e) => e.calendarId == calendarId && e.href == href).toList();
+
+  @override
+  Future<List<String>> seriesMemberIds(String calendarId, {String? recurringRemoteId, String? uid}) async => [
+        for (final e in _events.values)
+          if (e.calendarId == calendarId &&
+              ((recurringRemoteId != null && e.recurringRemoteId == recurringRemoteId) ||
+                  (uid != null && e.remoteId == uid && e.recurrenceId != null)))
+            e.id,
+      ];
 
   @override
   Future<List<CalendarEvent>> searchEvents(String query, Set<String> calendarIds,

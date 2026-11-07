@@ -1316,6 +1316,12 @@ abstract class AppLocalizations {
   /// **'Rappels enregistrés sur cet appareil uniquement.'**
   String get remindersDeviceOnly;
 
+  /// No description provided for @deviceRemindersScopeTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Appliquer les rappels de cet appareil à'**
+  String get deviceRemindersScopeTitle;
+
   /// No description provided for @snoozedUntil.
   ///
   /// In fr, this message translates to:

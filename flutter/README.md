@@ -95,7 +95,7 @@ Chaque événement peut avoir plusieurs rappels. Un rappel = un délai + un type
 |---|---|---|
 | Notification | Notification (canal « Rappels ») | Notification |
 | Plein écran | Notification plein écran par-dessus l'écran verrouillé, écran TimeFix avec Fermer / Répéter | Notification **urgente** (Time Sensitive, passe les modes Concentration) : Apple n'autorise pas le plein écran |
-| Alarme | Alarme système (`setAlarmClock`) : sonnerie d'alarme en boucle + vibration jusqu'à **Arrêter**, **Répéter** (snooze), arrêt automatique ; écran de sonnerie plein écran | iOS 26+ : vraie alarme **AlarmKit** (comme l'app Horloge) ; avant iOS 26 : notification urgente avec une sonnerie de 28 s |
+| Alarme | Alarme exacte : sonnerie d'alarme en boucle + vibration jusqu'à **Arrêter**, **Répéter** (snooze), arrêt automatique ; écran de sonnerie plein écran | iOS 26+ : vraie alarme **AlarmKit** (comme l'app Horloge) ; avant iOS 26 : notification urgente avec une sonnerie de 28 s |
 
 * **Presets** : délais intégrés (comme Google Agenda) + presets perso créés dans
   Paramètres → Rappels (nom facultatif, délai, type, journée entière ou non).
@@ -105,12 +105,22 @@ Chaque événement peut avoir plusieurs rappels. Un rappel = un délai + un type
   appareils TimeFix sonnent aussi) ; Google → les notifications deviennent des
   rappels Google, plein écran et alarme restent sur l'appareil ; calendriers en
   lecture seule (iCal…) → rappels ajoutés depuis la fiche de l'événement,
-  gardés sur l'appareil.
-* **Planification** : les rappels des 3 prochaines semaines sont programmés
-  dans le système (au plus 60 sur iOS, qui n'en garde que 64), et recalculés à
-  chaque ouverture de l'app, retour au premier plan, modification ou synchro.
-* **Autorisations** : demandées à la création du premier rappel ; leur état et
-  des boutons de test sont dans Paramètres → Rappels.
+  gardés sur l'appareil. Pour une occurrence d'une série Google ou une
+  occurrence déplacée, TimeFix demande si les rappels gardés sur l'appareil
+  valent pour cette occurrence ou pour toute la série.
+* **Planification** : les rappels des 5 prochaines semaines (Android) ou 3
+  semaines (iOS, au plus 60 car iOS n'en garde que 64) sont programmés dans le
+  système, et recalculés à chaque ouverture de l'app, retour au premier plan,
+  modification ou synchro. Seuls les rappels modifiés sont reprogrammés ; tout
+  est reprogrammé si les alarmes ont disparu (arrêt forcé, restauration) ou si
+  une autorisation a changé.
+* **Écran verrouillé** (Android) : l'écran de sonnerie s'affiche par-dessus
+  l'écran verrouillé ; le calendrier reste masqué tant qu'il n'est pas affiché,
+  et l'app repasse derrière l'écran verrouillé quand la sonnerie se ferme.
+* **Autorisations** : la fenêtre du système est proposée une seule fois, à la
+  création du premier rappel ; ensuite un message rappelle l'autorisation
+  manquante et son bouton « Autoriser » ouvre les réglages. L'état des
+  autorisations et des boutons de test sont dans Paramètres → Rappels.
 
 Limites connues :
 

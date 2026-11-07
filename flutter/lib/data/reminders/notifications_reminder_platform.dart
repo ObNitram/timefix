@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' show DartPluginRegistrant;
 
 import 'package:alarm_kit/alarm_kit.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:uuid/uuid.dart';
 
@@ -22,6 +24,10 @@ const _plainPrefix = 'rem:';
 const _actionStop = 'stop';
 const _actionSnooze = 'snooze';
 const _iosAlarmCategory = 'timefix_alarm';
+
+/// Snoozes made by the background isolate, one key each, until the app reads
+/// them. SharedPreferencesAsync keeps no per-isolate cache.
+const _backgroundSnoozePrefix = 'timefix.backgroundSnooze.';
 
 /// AlarmKit snooze needs a widget extension (countdown presentation) that
 /// must be created in Xcode. Set to true once it exists (see README).
@@ -346,6 +352,44 @@ class NotificationsReminderPlatform implements ReminderPlatform {
   }
 
   @override
+  Future<bool?> areScheduled(List<int> ids) async {
+    try {
+      if (!_isIos) {
+        return await _channel.invokeMethod<bool>('areScheduled', {'ids': ids});
+      }
+      final pending = {for (final r in await _fln.pendingNotificationRequests()) r.id};
+      final alarms = <String>{};
+      if (await _alarmKitReady()) {
+        alarms.addAll((await AlarmKit.instance.alarms()).map((a) => a.id.toLowerCase()));
+      }
+      return ids.every((id) => pending.contains(id) || alarms.contains(_alarmKitId(id)));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<List<ReminderAlert>> takeBackgroundSnoozes() async {
+    final result = <ReminderAlert>[];
+    try {
+      final store = SharedPreferencesAsync();
+      final keys = (await store.getKeys()).where((k) => k.startsWith(_backgroundSnoozePrefix));
+      for (final key in keys) {
+        final raw = await store.getString(key);
+        await store.remove(key);
+        if (raw == null) continue;
+        final m = jsonDecode(raw) as Map<String, dynamic>;
+        final alert = ReminderAlert.fromPayload(m['a'] as String?);
+        if (alert == null) continue;
+        result.add(alert.copyWith(fireAt: DateTime.fromMillisecondsSinceEpoch((m['f'] as num).toInt())));
+      }
+    } catch (_) {
+      // Unreadable: the snoozes still ring, they are just not tracked.
+    }
+    return result;
+  }
+
+  @override
   Future<void> enterRing() => _invoke('enterRing');
 
   @override
@@ -396,14 +440,14 @@ class NotificationsReminderPlatform implements ReminderPlatform {
   }
 
   @override
-  Future<void> request(ReminderPermission permission) async {
+  Future<void> request(ReminderPermission permission, {bool openSettingsIfDenied = false}) async {
     switch (permission) {
       case ReminderPermission.notifications:
         final granted = _isIos
             ? await _ios?.requestPermissions(alert: true, badge: true, sound: true)
             : await _android?.requestNotificationsPermission();
         // Already refused: the system shows no dialog any more.
-        if (granted != true) await _fln.openAppNotificationSettings();
+        if (granted != true && openSettingsIfDenied) await _fln.openAppNotificationSettings();
       case ReminderPermission.exactAlarms:
         await _android?.requestExactAlarmsPermission();
       case ReminderPermission.fullScreen:
@@ -413,9 +457,10 @@ class NotificationsReminderPlatform implements ReminderPlatform {
           final state = await AlarmKit.instance.authorizationState();
           if (state == AlarmAuthorization.notDetermined) {
             await AlarmKit.instance.requestAuthorization();
-          } else if (state == AlarmAuthorization.denied) {
-            // The "Alarms" switch is in the app's page of the Settings app.
-            await _fln.openAppNotificationSettings();
+          } else if (state == AlarmAuthorization.denied && openSettingsIfDenied) {
+            // The "Alarms" switch is on the app's own page of the Settings
+            // app (not its Notifications page).
+            await _channel.invokeMethod<void>('openAppSettings');
           }
         } catch (_) {}
         _alarmKitUsable = null;
@@ -486,6 +531,8 @@ String _encodePayload(ReminderAlert alert, AlarmOptions options) {
 @pragma('vm:entry-point')
 Future<void> reminderNotificationBackgroundHandler(NotificationResponse response) async {
   if (response.actionId != _actionSnooze) return; // Stop: already cancelled natively
+  // Plugins implemented in Dart (notifications, preferences) in this isolate.
+  DartPluginRegistrant.ensureInitialized();
   final decoded = _decodePayload(response.payload);
   if (decoded == null) return;
   final at = tz.TZDateTime.now(tz.UTC).add(decoded.options.snooze);
@@ -495,4 +542,10 @@ Future<void> reminderNotificationBackgroundHandler(NotificationResponse response
   );
   await NotificationsReminderPlatform._zonedSchedule(
       FlutterLocalNotificationsPlugin(), snoozed, decoded.options, at);
+  // Tell the app (cancelled with its event, known when tapped).
+  try {
+    await SharedPreferencesAsync().setString(
+        '$_backgroundSnoozePrefix${snoozed.id}',
+        jsonEncode({'a': snoozed.toPayload(), 'f': at.millisecondsSinceEpoch}));
+  } catch (_) {}
 }

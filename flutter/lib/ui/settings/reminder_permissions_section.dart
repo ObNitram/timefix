@@ -63,11 +63,7 @@ class _ReminderPermissionsSectionState extends ConsumerState<ReminderPermissions
             trailing: state == PermissionState.granted
                 ? null
                 : TextButton(
-                    onPressed: () async {
-                      await ref.read(reminderPlatformProvider).request(p);
-                      ref.invalidate(reminderPermissionsProvider);
-                      await ref.read(reminderServiceProvider).rescheduleAll();
-                    },
+                    onPressed: () => grantReminderPermission(ProviderScope.containerOf(context, listen: false), p),
                     child: Text(l10n.grant),
                   ),
           ),
@@ -91,7 +87,7 @@ class _ReminderPermissionsSectionState extends ConsumerState<ReminderPermissions
               ReminderType.alarm => l10n.testAlarm,
             }),
             onTap: () => runGuarded(context, () async {
-              await ensureReminderPermissions(context, ref, [Reminder(0, type)]);
+              await ensureReminderPermissions(context, [Reminder(0, type)]);
               await ref.read(reminderServiceProvider).scheduleTest(type);
               if (context.mounted) showSnack(context, l10n.testScheduled);
             }),

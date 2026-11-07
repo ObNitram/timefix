@@ -437,6 +437,7 @@
   "channelAlarmDescription": "Rappels qui sonnent comme un réveil",
   "notificationStartsNow": "Commence maintenant",
   "remindersDeviceOnly": "Rappels enregistrés sur cet appareil uniquement.",
+  "deviceRemindersScopeTitle": "Appliquer les rappels de cet appareil à",
   "snoozedUntil": "Répété à {time}",
   "@snoozedUntil": {
     "placeholders": {

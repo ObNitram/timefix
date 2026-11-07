@@ -73,11 +73,12 @@ final calendarsProvider = FutureProvider<List<CalendarInfo>>((ref) {
 });
 
 /// Device-only reminders of one event (by [localReminderKey]).
+/// Reminders kept on this device under the keys given one per line (see
+/// [deviceReminderKeys]).
 final localRemindersProvider =
-    FutureProvider.family<List<Reminder>, String>((ref, key) async {
+    FutureProvider.family<Map<String, List<Reminder>>, String>((ref, keys) async {
   ref.watch(dataRevisionProvider);
-  final map = await ref.watch(repositoryProvider).localReminders({key});
-  return map[key] ?? const [];
+  return ref.watch(repositoryProvider).localReminders(keys.split('\n').toSet());
 }, isAutoDispose: true);
 
 final calendarsByIdProvider = Provider<Map<String, CalendarInfo>>((ref) {

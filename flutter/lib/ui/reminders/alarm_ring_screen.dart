@@ -116,9 +116,22 @@ class _AlarmRingScreenState extends State<AlarmRingScreen> with SingleTickerProv
     try {
       await action();
     } finally {
-      if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop(result);
+      if (mounted) _removeOwnRoute(result);
     }
     if (after != null) await after();
+  }
+
+  /// Removes this screen's route, even when another route (a second ringing
+  /// screen, an event opened from a notification) is above it.
+  void _removeOwnRoute(String? result) {
+    final navigator = Navigator.of(context);
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isActive) return;
+    if (route.isCurrent) {
+      if (navigator.canPop()) navigator.pop(result);
+    } else {
+      navigator.removeRoute(route, result);
+    }
   }
 
   @override

@@ -1,0 +1,461 @@
+{
+  "@@locale": "fr",
+  "appTitle": "TimeFix",
+  "viewSchedule": "Planning",
+  "viewWeek": "Semaine",
+  "viewMonth": "Mois",
+  "today": "Aujourd'hui",
+  "search": "Rechercher",
+  "searchHint": "Rechercher des événements",
+  "noResults": "Aucun résultat",
+  "settings": "Paramètres",
+  "refresh": "Actualiser",
+  "addCalendar": "Ajouter un calendrier",
+  "calendars": "Calendriers",
+  "myCalendar": "Mon calendrier",
+  "noTitle": "(Sans titre)",
+  "allDay": "Toute la journée",
+  "addTitle": "Ajouter un titre",
+  "save": "Enregistrer",
+  "cancel": "Annuler",
+  "delete": "Supprimer",
+  "edit": "Modifier",
+  "close": "Fermer",
+  "ok": "OK",
+  "discardChangesTitle": "Abandonner les modifications ?",
+  "discard": "Abandonner",
+  "keepEditing": "Continuer",
+  "deleteEventTitle": "Supprimer cet événement ?",
+  "deleteRecurringTitle": "Supprimer l'événement périodique",
+  "editRecurringTitle": "Modifier l'événement périodique",
+  "scopeThis": "Cet événement",
+  "scopeFollowing": "Cet événement et les suivants",
+  "scopeAll": "Tous les événements",
+  "addLocation": "Ajouter un lieu",
+  "addDescription": "Ajouter une description",
+  "calendar": "Calendrier",
+  "defaultColor": "Couleur par défaut",
+  "color": "Couleur",
+  "repeatNone": "Ne se répète pas",
+  "repeatDaily": "Tous les jours",
+  "repeatWeekly": "Toutes les semaines le {weekday}",
+  "@repeatWeekly": {
+    "placeholders": {
+      "weekday": {
+        "type": "String"
+      }
+    }
+  },
+  "repeatMonthly": "Tous les mois le {day}",
+  "@repeatMonthly": {
+    "placeholders": {
+      "day": {
+        "type": "int"
+      }
+    }
+  },
+  "repeatYearly": "Tous les ans le {date}",
+  "@repeatYearly": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "repeatWeekdays": "Tous les jours de la semaine (du lundi au vendredi)",
+  "repeatCustom": "Répétition personnalisée",
+  "repeatEveryNDays": "{count, plural, =1{Tous les jours} other{Tous les {count} jours}}",
+  "@repeatEveryNDays": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "repeatEveryNWeeks": "{count, plural, =1{Toutes les semaines} other{Toutes les {count} semaines}}",
+  "@repeatEveryNWeeks": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "repeatEveryNMonths": "{count, plural, =1{Tous les mois} other{Tous les {count} mois}}",
+  "@repeatEveryNMonths": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "repeatEveryNYears": "{count, plural, =1{Tous les ans} other{Tous les {count} ans}}",
+  "@repeatEveryNYears": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "repeatOnDays": "{base}, le {days}",
+  "@repeatOnDays": {
+    "placeholders": {
+      "base": {
+        "type": "String"
+      },
+      "days": {
+        "type": "String"
+      }
+    }
+  },
+  "repeatUntil": "{base}, jusqu'au {date}",
+  "@repeatUntil": {
+    "placeholders": {
+      "base": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "repeatCount": "{base}, {count} fois",
+  "@repeatCount": {
+    "placeholders": {
+      "base": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nothingPlanned": "Rien de prévu",
+  "moreEvents": "+{count}",
+  "@moreEvents": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "readOnlyCalendar": "Calendrier en lecture seule",
+  "sourceIcal": "S'abonner via une URL iCal",
+  "sourceIcalSubtitle": "Lien .ics ou webcal:// (Google, Outlook, iCloud…)",
+  "sourceGoogle": "Compte Google",
+  "sourceGoogleSubtitle": "Synchroniser et modifier vos agendas Google",
+  "sourceLocal": "Nouveau calendrier local",
+  "sourceLocalSubtitle": "Stocké uniquement sur cet appareil",
+  "icalUrl": "URL du calendrier",
+  "icalUrlHint": "https://… ou webcal://…",
+  "nameOptional": "Nom (facultatif)",
+  "name": "Nom",
+  "subscribe": "S'abonner",
+  "create": "Créer",
+  "invalidUrl": "URL invalide",
+  "requiredField": "Champ obligatoire",
+  "icalError": "Impossible de charger le calendrier : {message}",
+  "@icalError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "googleError": "Connexion à Google impossible : {message}",
+  "@googleError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "googleSingleAccountNote": "Un seul compte Google peut être connecté à la fois sur cette version.",
+  "calendarAdded": "Calendrier ajouté",
+  "manageCalendars": "Gérer les calendriers",
+  "lastSync": "Dernière synchro : {date}",
+  "@lastSync": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "neverSynced": "Jamais synchronisé",
+  "syncNow": "Synchroniser",
+  "removeSource": "Supprimer la source",
+  "removeSourceConfirm": "Supprimer « {name} » et tous ses événements de cet appareil ?",
+  "@removeSourceConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteCalendar": "Supprimer le calendrier",
+  "deleteCalendarConfirm": "Supprimer « {name} » et tous ses événements ?",
+  "@deleteCalendarConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "rename": "Renommer",
+  "general": "Général",
+  "firstDayOfWeek": "Premier jour de la semaine",
+  "localeDefault": "Selon la langue",
+  "theme": "Thème",
+  "themeSystem": "Par défaut du système",
+  "themeLight": "Clair",
+  "themeDark": "Sombre",
+  "defaultDuration": "Durée par défaut des événements",
+  "minutes": "{count} minutes",
+  "@minutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncing": "Synchronisation…",
+  "syncFailed": "{count, plural, =1{Échec de la synchronisation d'une source} other{Échec de la synchronisation de {count} sources}}",
+  "@syncFailed": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "eventDeleted": "Événement supprimé",
+  "errorMessage": "Erreur : {message}",
+  "@errorMessage": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "sourceTypeLocal": "Sur cet appareil",
+  "sourceTypeIcal": "Abonnement iCal",
+  "sourceTypeGoogle": "Google",
+  "noWritableCalendar": "Aucun calendrier modifiable. Ajoutez un calendrier local ou un compte Google.",
+  "seriesInstanceNote": "Seule cette occurrence de la série sera modifiée.",
+  "noEvents": "Aucun événement",
+  "openMenu": "Ouvrir le menu",
+  "goToToday": "Aller à aujourd'hui",
+  "newEvent": "Nouvel événement",
+  "about": "À propos",
+  "colorTomato": "Tomate",
+  "colorFlamingo": "Flamant",
+  "colorTangerine": "Mandarine",
+  "colorBanana": "Banane",
+  "colorSage": "Sauge",
+  "colorBasil": "Basilic",
+  "colorPeacock": "Paon",
+  "colorBlueberry": "Myrtille",
+  "colorLavender": "Lavande",
+  "colorGrape": "Raisin",
+  "colorGraphite": "Graphite",
+  "repeat": "Répétition",
+  "googleReconnect": "Reconnexion à Google nécessaire",
+  "sourceCalDav": "Compte CalDAV",
+  "sourceCalDavSubtitle": "Serveur TimeFix auto-hébergé, Nextcloud, Radicale, iCloud…",
+  "sourceTypeCalDav": "CalDAV",
+  "serverUrl": "Adresse du serveur",
+  "serverUrlHint": "https://cal.exemple.fr",
+  "username": "Identifiant",
+  "password": "Mot de passe",
+  "connect": "Se connecter",
+  "caldavError": "Connexion CalDAV impossible : {message}",
+  "@caldavError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "caldavAuthError": "Identifiant ou mot de passe incorrect",
+  "googleAccountLimitError": "Un seul compte Google à la fois : retirez d'abord {email}.",
+  "@googleAccountLimitError": {
+    "placeholders": {"email": {"type": "String"}}
+  },
+  "googleAccountMismatchError": "Google est connecté avec {actual} au lieu de {expected}. Reconnectez {expected} ou retirez ce compte.",
+  "@googleAccountMismatchError": {
+    "placeholders": {"actual": {"type": "String"}, "expected": {"type": "String"}}
+  },
+  "newCalendar": "Nouveau calendrier",
+  "changePassword": "Modifier le mot de passe",
+  "passwordUpdated": "Mot de passe mis à jour",
+  "conflictError": "Cet événement a été modifié ailleurs. Les données ont été actualisées : réessayez.",
+  "caldavHelp": "Pour un serveur TimeFix, utilisez l'adresse du serveur (ex. https://cal.exemple.fr) et le compte créé par l'administrateur.",
+  "account": "Compte",
+  "reminders": "Rappels",
+  "addReminder": "Ajouter un rappel",
+  "reminderTypePush": "Notification",
+  "reminderTypeFullScreen": "Plein écran",
+  "reminderTypeAlarm": "Alarme",
+  "reminderAtStart": "Au moment de l'événement",
+  "reminderMinutesBefore": "{count, plural, =1{1 minute avant} other{{count} minutes avant}}",
+  "@reminderMinutesBefore": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "reminderHoursBefore": "{count, plural, =1{1 heure avant} other{{count} heures avant}}",
+  "@reminderHoursBefore": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "reminderDaysBefore": "{count, plural, =1{1 jour avant} other{{count} jours avant}}",
+  "@reminderDaysBefore": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "reminderWeeksBefore": "{count, plural, =1{1 semaine avant} other{{count} semaines avant}}",
+  "@reminderWeeksBefore": {
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "reminderHoursMinutesBefore": "{hours} h {minutes} min avant",
+  "@reminderHoursMinutesBefore": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderMinutesAfter": "{count} min après le début",
+  "@reminderMinutesAfter": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderSameDayAt": "Le jour même à {time}",
+  "@reminderSameDayAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderDayBeforeAt": "La veille à {time}",
+  "@reminderDayBeforeAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderDaysBeforeAt": "{count} jours avant à {time}",
+  "@reminderDaysBeforeAt": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderCustom": "Personnalisé…",
+  "reminderCustomTitle": "Rappel personnalisé",
+  "myPresets": "Mes presets",
+  "unitMinutes": "minutes",
+  "unitHours": "heures",
+  "unitDays": "jours",
+  "unitWeeks": "semaines",
+  "daysBefore": "Jours avant",
+  "atTime": "Heure",
+  "fullScreenIosNote": "Sur iPhone : notification urgente, sans plein écran.",
+  "alarmIosNote": "Sur iPhone : alarme système à partir d'iOS 26, notification urgente avant.",
+  "defaultReminders": "Rappels par défaut",
+  "defaultRemindersTimed": "Événements",
+  "defaultRemindersAllDay": "Événements sur la journée",
+  "noReminders": "Aucun rappel",
+  "newPreset": "Nouveau preset",
+  "editPreset": "Modifier le preset",
+  "deletePreset": "Supprimer le preset",
+  "presetForAllDay": "Pour les événements sur la journée",
+  "presetsHint": "Vos presets apparaissent quand vous ajoutez un rappel à un événement.",
+  "alarmSection": "Alarme",
+  "alarmSound": "Sonnerie",
+  "soundSystem": "Sonnerie d'alarme du téléphone",
+  "soundClassic": "Classique",
+  "soundDigital": "Numérique",
+  "soundGentle": "Douce",
+  "snoozeDuration": "Répétition (snooze)",
+  "autoStop": "Arrêt automatique après",
+  "vibration": "Vibration",
+  "permissions": "Autorisations",
+  "permissionNotifications": "Notifications",
+  "permissionExactAlarms": "Alarmes et rappels à l'heure exacte",
+  "permissionFullScreen": "Notifications plein écran",
+  "permissionAlarmKit": "Alarmes (iOS 26 et plus)",
+  "permissionGranted": "Autorisé",
+  "permissionDenied": "Non autorisé",
+  "permissionUnsupported": "Non disponible sur cet appareil",
+  "grant": "Autoriser",
+  "testSection": "Tester",
+  "testPush": "Tester une notification",
+  "testFullScreen": "Tester le plein écran",
+  "testAlarm": "Tester l'alarme",
+  "testScheduled": "Déclenchement dans 5 secondes. Verrouillez l'écran pour voir le rendu réel.",
+  "testEventTitle": "Test TimeFix",
+  "alarmStop": "Arrêter",
+  "alarmSnooze": "Répéter ({minutes} min)",
+  "@alarmSnooze": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "alarmDismiss": "Fermer",
+  "openEvent": "Ouvrir l'événement",
+  "channelPush": "Rappels",
+  "channelPushDescription": "Notifications de rappel des événements",
+  "channelFullScreen": "Rappels plein écran",
+  "channelFullScreenDescription": "Rappels affichés en plein écran",
+  "channelAlarm": "Alarmes",
+  "channelAlarmDescription": "Rappels qui sonnent comme un réveil",
+  "notificationStartsNow": "Commence maintenant",
+  "remindersDeviceOnly": "Rappels enregistrés sur cet appareil uniquement.",
+  "deviceRemindersScopeTitle": "Appliquer les rappels de cet appareil à",
+  "snoozedUntil": "Répété à {time}",
+  "@snoozedUntil": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "alarmSnoozeShort": "Répéter",
+  "notificationPermissionHint": "Autorisez les notifications pour recevoir vos rappels.",
+  "fullScreenPermissionHint": "Les rappels plein écran et les alarmes ont besoin d'une autorisation pour s'afficher sur l'écran verrouillé.",
+  "remindersSentinel": "Ouvrez TimeFix pour programmer vos prochains rappels."
+}

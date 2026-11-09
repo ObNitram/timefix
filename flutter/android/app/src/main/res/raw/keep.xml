@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resources referenced only by name from Dart (notification icon and
+     alarm sounds) must survive resource shrinking in release builds. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_reminder,@raw/timefix_alarm_classic,@raw/timefix_alarm_digital,@raw/timefix_alarm_gentle" />

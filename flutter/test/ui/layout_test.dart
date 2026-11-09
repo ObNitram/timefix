@@ -53,6 +53,18 @@ void main() {
       expect(r.single.endMinutes, 120);
     });
 
+    test('events are placed on wall-clock minutes on DST change days', () {
+      // Europe: 29 March 2026 (spring forward), 25 October 2026 (fall back).
+      // Meaningful when run with TZ=Europe/Paris.
+      for (final d in [DateTime(2026, 3, 29), DateTime(2026, 10, 25)]) {
+        final r = layoutDay(d, [
+          occ('a', DateTime(d.year, d.month, d.day, 9), DateTime(d.year, d.month, d.day, 10)),
+          occ('b', DateTime(d.year, d.month, d.day, 22), DateTime(d.year, d.month, d.day + 1, 1)),
+        ]);
+        expect(r.map((p) => (p.startMinutes, p.endMinutes)), [(540, 600), (1320, 1440)]);
+      }
+    });
+
     test('short events get a minimum height', () {
       final r = layoutDay(day, [occ('s', at(9), at(9, 5))]);
       expect(r.single.endMinutes - r.single.startMinutes, 20);

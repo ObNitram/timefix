@@ -126,6 +126,8 @@
   "connect": "Connect",
   "caldavError": "Could not connect to CalDAV: {message}",
   "caldavAuthError": "Wrong username or password",
+  "googleAccountLimitError": "Only one Google account at a time: remove {email} first.",
+  "googleAccountMismatchError": "Google is signed in as {actual} instead of {expected}. Sign in to {expected} again or remove this account.",
   "newCalendar": "New calendar",
   "changePassword": "Change password",
   "passwordUpdated": "Password updated",

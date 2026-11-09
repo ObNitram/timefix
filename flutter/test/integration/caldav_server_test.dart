@@ -191,6 +191,70 @@ void main() {
     expect(await serverObjects(cal), isEmpty);
   }, skip: skip);
 
+  test('a series moved to another weekday takes its rule and modified occurrences along', () async {
+    final cal = await connect();
+    await events.create(CalendarEvent(
+      id: events.newEventId(),
+      calendarId: cal.id,
+      title: 'Gym',
+      start: paris(2026, 11, 2, 18), // Monday
+      end: paris(2026, 11, 2, 19),
+      rrule: 'FREQ=WEEKLY;BYDAY=MO',
+    ));
+    // 9 Nov renamed only (same time).
+    var occ = await occurrences(november);
+    await events.update(
+        original: occ[1],
+        edited: occ[1].event.copyWith(title: 'Gym (coach)', start: occ[1].start, end: occ[1].end),
+        scope: RecurrenceScope.thisEvent);
+    // Every occurrence moves to Tuesday 19:00, from the 16 Nov one.
+    occ = await occurrences(november);
+    final third = occ.firstWhere((o) => parisDay(o.start) == 16);
+    await events.update(
+        original: third,
+        edited: third.event.copyWith(start: paris(2026, 11, 17, 19), end: paris(2026, 11, 17, 20)),
+        scope: RecurrenceScope.all);
+
+    final data = (await serverObjects(cal)).single.data;
+    expect(data, contains('RRULE:FREQ=WEEKLY;BYDAY=TU'));
+    expect(data, contains('DTSTART;TZID=Europe/Paris:20261103T190000'));
+    expect(data, contains('RECURRENCE-ID;TZID=Europe/Paris:20261110T190000'));
+    await sync.syncAll();
+    occ = await occurrences(november);
+    expect(occ.map((o) => (parisDay(o.start), o.title)), [
+      (3, 'Gym'),
+      (10, 'Gym (coach)'),
+      (17, 'Gym'),
+      (24, 'Gym'),
+    ]);
+  }, skip: skip);
+
+  test('"this and following" keeps the remaining COUNT', () async {
+    final cal = await connect();
+    await events.create(CalendarEvent(
+      id: events.newEventId(),
+      calendarId: cal.id,
+      title: 'Cours',
+      start: paris(2026, 11, 2, 9),
+      end: paris(2026, 11, 2, 10),
+      rrule: 'FREQ=DAILY;COUNT=6',
+    ));
+    final fourth = (await occurrences(november))[3];
+    await events.update(
+        original: fourth,
+        edited: fourth.event.copyWith(title: 'Cours (salle B)', start: fourth.start, end: fourth.end),
+        scope: RecurrenceScope.thisAndFollowing);
+    final objects = await serverObjects(cal);
+    expect(objects, hasLength(2));
+    expect(objects.map((o) => o.data).join(), contains('COUNT=3'));
+    await sync.syncAll();
+    final occ = await occurrences(november);
+    expect(occ.map((o) => (parisDay(o.start), o.title)), [
+      for (final d in [2, 3, 4]) (d, 'Cours'),
+      for (final d in [5, 6, 7]) (d, 'Cours (salle B)'),
+    ]);
+  }, skip: skip);
+
   test('changes made elsewhere are synced, and stale edits are refused', () async {
     final cal = await connect();
     // Another client creates an event.

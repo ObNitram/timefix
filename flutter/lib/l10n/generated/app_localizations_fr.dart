@@ -490,6 +490,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String get caldavAuthError => 'Identifiant ou mot de passe incorrect';
 
   @override
+  String googleAccountLimitError(String email) {
+    return 'Un seul compte Google à la fois : retirez d\'abord $email.';
+  }
+
+  @override
+  String googleAccountMismatchError(String actual, String expected) {
+    return 'Google est connecté avec $actual au lieu de $expected. Reconnectez $expected ou retirez ce compte.';
+  }
+
+  @override
   String get newCalendar => 'Nouveau calendrier';
 
   @override

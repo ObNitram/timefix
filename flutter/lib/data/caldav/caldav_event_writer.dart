@@ -2,6 +2,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../domain/models.dart';
 import '../../domain/recurrence.dart';
+import '../../domain/series_edit.dart';
 import '../../domain/reminders.dart';
 import '../calendar_repository.dart';
 import '../event_service.dart';
@@ -85,30 +86,37 @@ class CalDavEventWriter {
         final ended = master.copyWith(
             rrule: rruleEndingBefore(master.rrule!, original.start, master.allDay), updatedAt: now);
         await _write(cal, source, href, before: resource, after: [...others, ended]);
-        await create(edited.copyWith(exdates: const []), cal, source);
+        await create(followingSeries(master, original.start, edited), cal, source);
       case RecurrenceScope.thisAndFollowing:
       case RecurrenceScope.all:
-        final shift = edited.start.difference(original.start);
-        final duration = edited.end.difference(edited.start);
-        final newStart = master.start.add(shift);
-        final updated = keepIdentity(edited).copyWith(
-          start: newStart,
-          end: newStart.add(duration),
-          exdates: shift == Duration.zero ? master.exdates : const [],
-          clearRecurrenceId: true,
-        );
+        final series = wholeSeries(master, original.start, edited);
+        final moved = series.start != master.start;
+        final ruleKept = series.rrule != null && edited.rrule == master.rrule;
+        final updated = keepIdentity(series).copyWith(clearRecurrenceId: true);
         // Reminder changes for the whole series also apply to the modified
         // occurrences that had the series' reminders.
         final remindersChanged = !_sameReminders(updated.reminders, master.reminders);
+        DateTime follow(DateTime d) => shiftLikeMove(d, original.start, edited.start, allDay: master.allDay);
         final overrides = [
           for (final o in others)
-            remindersChanged && _sameReminders(o.reminders, master.reminders)
-                ? o.copyWith(reminders: updated.reminders, updatedAt: now)
-                : o,
+            if (!moved || (ruleKept && o.recurrenceId != null))
+              o.copyWith(
+                reminders: remindersChanged && _sameReminders(o.reminders, master.reminders)
+                    ? updated.reminders
+                    : null,
+                // The modified occurrences follow the series; one that kept
+                // its time (only its title changed, say) moves with it.
+                recurrenceId: moved ? follow(o.recurrenceId!) : null,
+                start: moved && o.start.isAtSameMomentAs(o.recurrenceId!) ? follow(o.start) : null,
+                end: moved && o.start.isAtSameMomentAs(o.recurrenceId!)
+                    ? follow(o.start).add(o.end.difference(o.start))
+                    : null,
+                updatedAt: now,
+              ),
         ];
-        // Moving the whole series invalidates its modified occurrences.
-        await _write(cal, source, href,
-            before: resource, after: shift == Duration.zero ? [...overrides, updated] : [updated]);
+        // With a new rule, the modified occurrences of a moved series no
+        // longer match any occurrence: they are dropped.
+        await _write(cal, source, href, before: resource, after: [...overrides, updated]);
     }
   }
 

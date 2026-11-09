@@ -125,4 +125,17 @@ void main() {
     expect(IcsParser.parseDuration('-PT15M'), const Duration(minutes: -15));
     expect(IcsParser.parseDuration('P1DT2H'), const Duration(days: 1, hours: 2));
   });
+
+  test('a series in UTC (Z) repeats at the same UTC time, whatever the zones', () {
+    tzdata.initializeTimeZones();
+    const ics = 'BEGIN:VCALENDAR\r\nX-WR-TIMEZONE:Europe/Paris\r\n'
+        'BEGIN:VEVENT\r\nUID:utc@test\r\nDTSTART:20260105T090000Z\r\nDTEND:20260105T100000Z\r\n'
+        'RRULE:FREQ=WEEKLY\r\nSUMMARY:UTC\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n';
+    final event = IcalService.toEvents(IcsParser().parse(ics), 'c').single;
+    expect(event.timeZone, 'UTC');
+    final summer = const RecurrenceExpander()
+        .occurrences(event, DateRange(DateTime.utc(2026, 7, 1), DateTime.utc(2026, 7, 8)))
+        .single;
+    expect(summer.$1.toUtc(), DateTime.utc(2026, 7, 6, 9));
+  });
 }

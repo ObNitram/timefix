@@ -488,6 +488,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get caldavAuthError => 'Wrong username or password';
 
   @override
+  String googleAccountLimitError(String email) {
+    return 'Only one Google account at a time: remove $email first.';
+  }
+
+  @override
+  String googleAccountMismatchError(String actual, String expected) {
+    return 'Google is signed in as $actual instead of $expected. Sign in to $expected again or remove this account.';
+  }
+
+  @override
   String get newCalendar => 'New calendar';
 
   @override

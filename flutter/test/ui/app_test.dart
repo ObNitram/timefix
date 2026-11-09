@@ -69,6 +69,51 @@ void main() {
     expect(find.text('Vacances'), findsWidgets);
   });
 
+  testWidgets('week view: zooming out on a tall screen keeps working', (tester) async {
+    tester.view.physicalSize = const Size(1024, 1800); // tablet, the whole day fits
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(await buildTestApp(repository: await seededRepository()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Ouvrir le menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Semaine'));
+    await tester.pumpAndSettle();
+
+    final grid = tester.getCenter(find.descendant(
+        of: find.byType(WeekView), matching: find.byType(SingleChildScrollView)).first);
+    final a = await tester.startGesture(grid - const Offset(0, 150));
+    final b = await tester.startGesture(grid + const Offset(0, 150));
+    for (var i = 0; i < 5; i++) {
+      await a.moveBy(const Offset(0, 25));
+      await b.moveBy(const Offset(0, -25));
+      await tester.pump();
+    }
+    await a.up();
+    await b.up();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(WeekView), findsOneWidget);
+  });
+
+  testWidgets('editor: a text-only change asks before closing', (tester) async {
+    await setPhoneSize(tester);
+    await tester.pumpWidget(await buildTestApp(repository: await seededRepository()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Réunion d\'équipe'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Modifier'));
+    await tester.pumpAndSettle();
+    // Moving the cursor alone is not a change.
+    await tester.tap(find.byType(TextField).first);
+    await tester.pump();
+    await tester.enterText(find.byType(TextField).first, 'Réunion renommée');
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+    expect(find.text('Abandonner les modifications ?'), findsOneWidget);
+  });
+
   testWidgets('month view: tapping a day opens the day sheet', (tester) async {
     await setPhoneSize(tester);
     final repo = await seededRepository();

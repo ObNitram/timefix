@@ -44,8 +44,10 @@ List<PositionedOccurrence> layoutDay(
     }
     final s = o.start.isBefore(dayStart) ? dayStart : o.start;
     final e = o.end.isAfter(dayEnd) ? dayEnd : o.end;
-    final sm = s.difference(dayStart).inMinutes.clamp(0, 1440);
-    var em = e.difference(dayStart).inMinutes.clamp(0, 1440);
+    // Wall-clock minutes, like the hour labels: on DST change days the
+    // elapsed time since midnight is an hour off.
+    final sm = s.hour * 60 + s.minute;
+    var em = e == dayEnd ? 1440 : e.hour * 60 + e.minute;
     // Visual end, so that very short events still get a readable height.
     final visualEnd = (em - sm < minDurationMinutes)
         ? (sm + minDurationMinutes).clamp(0, 1440)

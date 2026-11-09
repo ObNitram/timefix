@@ -12,6 +12,27 @@ class GoogleAuthRequiredException implements Exception {
   String toString() => 'Google authorization required';
 }
 
+/// Only one Google account at a time: the app signs in a single account.
+class GoogleAccountLimitException implements Exception {
+  GoogleAccountLimitException(this.connected);
+
+  /// E-mail of the account already connected.
+  final String connected;
+
+  @override
+  String toString() => 'A Google account is already connected: $connected';
+}
+
+/// Google is signed in to another account than the one a source belongs to.
+class GoogleAccountMismatchException implements Exception {
+  GoogleAccountMismatchException({required this.expected, required this.actual});
+  final String expected;
+  final String actual;
+
+  @override
+  String toString() => 'Signed in to Google as $actual instead of $expected';
+}
+
 /// Abstraction over the Google Calendar API so the sync logic can be tested.
 abstract class GoogleCalendarGateway {
   /// Interactive sign-in. Returns the account e-mail.

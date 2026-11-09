@@ -854,6 +854,18 @@ abstract class AppLocalizations {
   /// **'Identifiant ou mot de passe incorrect'**
   String get caldavAuthError;
 
+  /// No description provided for @googleAccountLimitError.
+  ///
+  /// In fr, this message translates to:
+  /// **'Un seul compte Google à la fois : retirez d\'abord {email}.'**
+  String googleAccountLimitError(String email);
+
+  /// No description provided for @googleAccountMismatchError.
+  ///
+  /// In fr, this message translates to:
+  /// **'Google est connecté avec {actual} au lieu de {expected}. Reconnectez {expected} ou retirez ce compte.'**
+  String googleAccountMismatchError(String actual, String expected);
+
   /// No description provided for @newCalendar.
   ///
   /// In fr, this message translates to:

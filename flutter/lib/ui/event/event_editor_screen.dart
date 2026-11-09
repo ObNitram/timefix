@@ -7,6 +7,7 @@ import '../../core/date_utils.dart';
 import '../../data/event_service.dart';
 import '../../domain/models.dart';
 import '../../domain/recurrence.dart';
+import '../../domain/series_edit.dart';
 import '../../domain/reminders.dart';
 import '../../state/reminder_settings.dart';
 import '../reminders/reminder_list_editor.dart';
@@ -104,10 +105,14 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
       _end = _allDay ? _start : _start.add(Duration(minutes: minutes));
       _reminders = ref.read(reminderSettingsProvider).defaultsFor(allDay: _allDay);
     }
+    _initialTexts = [_title.text, _location.text, _description.text];
     for (final c in [_title, _location, _description]) {
-      c.addListener(_markDirty);
+      c.addListener(_onTextChanged);
     }
   }
+
+  /// Texts as opened, to tell edits from mere cursor moves.
+  late final List<String> _initialTexts;
 
   @override
   void dispose() {
@@ -117,7 +122,18 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
     super.dispose();
   }
 
-  void _markDirty() => _dirty = true;
+  /// The first text edit rebuilds the screen, so that the back guard
+  /// ([PopScope]) asks before discarding it.
+  void _onTextChanged() {
+    if (_dirty) return;
+    final texts = [_title.text, _location.text, _description.text];
+    for (var i = 0; i < texts.length; i++) {
+      if (texts[i] != _initialTexts[i]) {
+        setState(() => _dirty = true);
+        return;
+      }
+    }
+  }
 
   /// Adds the reminders kept on this device (e.g. Google alarms).
   Future<void> _loadDeviceReminders(CalendarEvent e) async {
@@ -129,8 +145,13 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
   }
 
   void _update(VoidCallback fn) => setState(() {
+        final start = _start;
         fn();
         _dirty = true;
+        // A rule chosen here follows the date ("every Monday" moved to a
+        // Tuesday). An event's own rule follows on save, for the occurrences
+        // the change applies to.
+        if (_rrule != null && _rrule != _original?.rrule) _rrule = rruleMovedBy(_rrule!, start, _start);
       });
 
   Future<void> _pickDate({required bool isStart}) async {

@@ -280,6 +280,14 @@
     }
   },
   "caldavAuthError": "Identifiant ou mot de passe incorrect",
+  "googleAccountLimitError": "Un seul compte Google à la fois : retirez d'abord {email}.",
+  "@googleAccountLimitError": {
+    "placeholders": {"email": {"type": "String"}}
+  },
+  "googleAccountMismatchError": "Google est connecté avec {actual} au lieu de {expected}. Reconnectez {expected} ou retirez ce compte.",
+  "@googleAccountMismatchError": {
+    "placeholders": {"actual": {"type": "String"}, "expected": {"type": "String"}}
+  },
   "newCalendar": "Nouveau calendrier",
   "changePassword": "Modifier le mot de passe",
   "passwordUpdated": "Mot de passe mis à jour",

@@ -6,6 +6,7 @@ import 'caldav/caldav_event_writer.dart';
 import '../domain/models.dart';
 import '../domain/reminders.dart';
 import '../domain/recurrence.dart';
+import '../domain/series_edit.dart';
 import 'calendar_repository.dart';
 import 'google/google_calendar_service.dart';
 import 'google/google_mapper.dart';
@@ -98,6 +99,7 @@ class EventService {
       case SourceType.local:
         await repository.upsertEvent(e);
       case SourceType.google:
+        await sync.verifyGoogleAccount(source);
         final created = await google.insertEvent(cal.remoteId!,
             GoogleMapper.toGoogle(e, calendarDefaults: sync.googleDefaults(cal.id)));
         final key = e.isRecurring
@@ -142,7 +144,16 @@ class EventService {
         await _updateLocal(original, edited, scope);
         return;
       }
-      await create(edited.copyWith(id: newEventId()));
+      // Only the occurrences the scope covers are created there.
+      final isFirst = original.start == master.start;
+      final moved = !master.isRecurring
+          ? edited
+          : switch (scope) {
+              RecurrenceScope.thisEvent => edited.copyWith(clearRrule: true, exdates: const []),
+              RecurrenceScope.thisAndFollowing when !isFirst => followingSeries(master, original.start, edited),
+              _ => wholeSeries(master, original.start, edited),
+            };
+      await create(moved.copyWith(id: newEventId(), clearRemote: true));
       // A Google instance is moved alone: never delete its whole series.
       await delete(original,
           scope: master.recurringRemoteId != null ? RecurrenceScope.thisEvent : scope);
@@ -157,6 +168,7 @@ class EventService {
         // Google instances are stored individually: edit this one only.
         // Reminders are sent only when their Google part changed, so that
         // e-mail reminders and `useDefault` are left alone otherwise.
+        await sync.verifyGoogleAccount(oldSource);
         await google.patchEvent(
             oldCal.remoteId!,
             master.remoteId!,
@@ -210,21 +222,13 @@ class EventService {
         await repository.upsertEvent(master.copyWith(
             rrule: rruleEndingBefore(master.rrule!, original.start, master.allDay),
             updatedAt: now));
-        await repository.upsertEvent(edited.copyWith(
-            id: newEventId(), exdates: const [], updatedAt: now));
+        await repository.upsertEvent(
+            followingSeries(master, original.start, edited).copyWith(id: newEventId(), updatedAt: now));
       case RecurrenceScope.thisAndFollowing:
       case RecurrenceScope.all:
-        // Shift the series by the same amount the occurrence was moved.
-        final shift = edited.start.difference(original.start);
-        final duration = edited.end.difference(edited.start);
-        final newStart = master.start.add(shift);
-        await repository.upsertEvent(edited.copyWith(
-          id: master.id,
-          start: newStart,
-          end: newStart.add(duration),
-          exdates: shift == Duration.zero ? master.exdates : const [],
-          updatedAt: now,
-        ));
+        // The series moves the way the occurrence was moved.
+        await repository.upsertEvent(
+            wholeSeries(master, original.start, edited).copyWith(id: master.id, updatedAt: now));
     }
   }
 
@@ -252,6 +256,7 @@ class EventService {
         final id = scope == RecurrenceScope.all && master.recurringRemoteId != null
             ? master.recurringRemoteId!
             : master.remoteId!;
+        await sync.verifyGoogleAccount(source);
         await google.deleteEvent(cal.remoteId!, id);
         if (id == master.remoteId) {
           await repository.deleteEvent(master.id);

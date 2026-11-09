@@ -291,8 +291,10 @@ class IcsParser {
     final h = int.parse(m.group(4)!), mi = int.parse(m.group(5)!),
         s = int.tryParse(m.group(6) ?? '') ?? 0;
     if (m.group(7) != null) {
+      // Explicit UTC: a series repeats at the same UTC time, whatever the
+      // calendar's or the device's zone.
       return ParsedIcsDate(DateTime.utc(y, mo, d, h, mi, s).toLocal(),
-          isDate: false);
+          isDate: false, tzid: 'UTC');
     }
     final tzid = prop.param('TZID');
     final loc = _location(tzid) ?? fallback;

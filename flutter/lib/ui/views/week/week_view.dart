@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -174,7 +176,10 @@ class _WeekPageState extends ConsumerState<_WeekPage> {
     widget.onHourHeightChanged(h);
     final offset = _pinchFocalContentHours! * h - _pinchFocalViewportY!;
     if (_scroll.hasClients) {
-      _scroll.jumpTo(offset.clamp(0, _scroll.position.maxScrollExtent + 24 * (h - widget.hourHeight)));
+      // Extent once the grid has its new height; negative when the whole
+      // day fits in the viewport (tall screens zoomed out).
+      final maxExtent = math.max(0.0, _scroll.position.maxScrollExtent + 24 * (h - widget.hourHeight));
+      _scroll.jumpTo(offset.clamp(0.0, maxExtent));
     }
   }
 

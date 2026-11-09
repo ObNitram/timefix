@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/colors.dart';
 import '../../data/caldav/caldav_client.dart';
+import '../../data/google/google_calendar_service.dart';
 import '../../domain/models.dart';
 import '../format.dart';
 
@@ -228,6 +229,9 @@ String describeError(BuildContext context, Object e) {
   return switch (e) {
     CalDavConflictException() => l10n.conflictError,
     CalDavAuthException() => l10n.caldavAuthError,
+    GoogleAccountLimitException(:final connected) => l10n.googleAccountLimitError(connected),
+    GoogleAccountMismatchException(:final actual, :final expected) =>
+      l10n.googleAccountMismatchError(actual, expected),
     _ => l10n.errorMessage('$e'),
   };
 }

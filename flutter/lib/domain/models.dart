@@ -249,6 +249,9 @@ class CalendarEvent {
     List<Reminder>? reminders,
     List<String>? extraAlarms,
     DateTime? updatedAt,
+    /// Drops the link to the remote copy (remote ids, href, ETag,
+    /// RECURRENCE-ID): the event is copied to another calendar.
+    bool clearRemote = false,
   }) =>
       CalendarEvent(
         id: id ?? this.id,
@@ -263,13 +266,14 @@ class CalendarEvent {
         rrule: clearRrule ? null : (rrule ?? this.rrule),
         exdates: exdates ?? this.exdates,
         color: clearColor ? null : (color ?? this.color),
-        remoteId: remoteId ?? this.remoteId,
-        recurringRemoteId: clearRecurringRemoteId
+        remoteId: remoteId ?? (clearRemote ? null : this.remoteId),
+        recurringRemoteId: clearRecurringRemoteId || clearRemote
             ? null
             : (recurringRemoteId ?? this.recurringRemoteId),
-        href: href ?? this.href,
-        etag: etag ?? this.etag,
-        recurrenceId: clearRecurrenceId ? null : (recurrenceId ?? this.recurrenceId),
+        href: href ?? (clearRemote ? null : this.href),
+        etag: etag ?? (clearRemote ? null : this.etag),
+        recurrenceId:
+            clearRecurrenceId || clearRemote ? null : (recurrenceId ?? this.recurrenceId),
         reminders: reminders ?? this.reminders,
         extraAlarms: extraAlarms ?? this.extraAlarms,
         updatedAt: updatedAt ?? this.updatedAt,

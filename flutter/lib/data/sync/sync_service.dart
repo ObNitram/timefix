@@ -133,8 +133,13 @@ class SyncService {
     return source;
   }
 
-  /// Signs in to Google and imports the account calendars.
+  /// Signs in to Google and imports the account calendars. A single account
+  /// is supported: signing in to another one would leave the first
+  /// account's calendars synced with the wrong identity.
   Future<CalendarSource> addGoogleAccount() async {
+    for (final s in await repository.getSources()) {
+      if (s.type == SourceType.google) throw GoogleAccountLimitException(s.accountEmail ?? s.name);
+    }
     final email = await google.signIn();
     final sourceId = 'google:$email';
     final source = CalendarSource(
@@ -328,8 +333,22 @@ class SyncService {
     await repository.upsertCalendar(current.copyWith(syncToken: ctag));
   }
 
+  /// Refuses to go on when Google is signed in to another account than
+  /// [source]'s (its calendars would be replaced by the other account's).
+  Future<void> verifyGoogleAccount(CalendarSource source) async {
+    final expected = source.accountEmail;
+    if (expected == null) return;
+    final actual = await google.currentAccount();
+    if (actual != null && actual.toLowerCase() != expected.toLowerCase()) {
+      throw GoogleAccountMismatchException(expected: expected, actual: actual);
+    }
+  }
+
   Future<void> _syncGoogle(CalendarSource source, {required bool interactive}) async {
+    await verifyGoogleAccount(source);
     final entries = await google.listCalendars(interactive: interactive);
+    // Listing may have signed in (interactive): check again before writing.
+    await verifyGoogleAccount(source);
     final existing = {
       for (final c in await repository.getCalendars())
         if (c.sourceId == source.id) c.remoteId: c
@@ -376,12 +395,15 @@ class SyncService {
     }
     final defaults = _googleDefaults[cal.id] ?? const <Reminder>[];
     final now = DateTime.now();
+    final source = await repository.getSource(cal.sourceId);
+    if (source != null) await verifyGoogleAccount(source);
     final events = await google.listEvents(
       cal.remoteId!,
       now.subtract(googlePastWindow),
       now.add(googleFutureWindow),
       interactive: interactive,
     );
+    if (source != null) await verifyGoogleAccount(source);
     final mapped = [
       for (final e in events) ?GoogleMapper.fromGoogle(e, cal.id, calendarDefaults: defaults),
     ];

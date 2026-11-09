@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/colors.dart';
 import '../../data/caldav/caldav_client.dart';
+import '../../data/google/google_calendar_service.dart';
 import '../../data/ical/ical_service.dart';
 import '../../state/providers.dart';
 import '../format.dart';
@@ -29,6 +30,8 @@ class _AddCalendarScreenState extends ConsumerState<AddCalendarScreen> {
       if (!mounted) return;
       showSnack(context, l10n.calendarAdded);
       Navigator.pop(context);
+    } on GoogleAccountLimitException catch (e) {
+      if (mounted) showSnack(context, describeError(context, e));
     } catch (e) {
       if (mounted) showSnack(context, l10n.googleError('$e'));
     } finally {

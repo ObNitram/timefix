@@ -9,6 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:timefix/core/date_utils.dart';
 import 'package:timefix/data/db/sqlite_calendar_repository.dart';
 import 'package:timefix/data/event_service.dart';
+import 'package:timefix/data/google/google_calendar_service.dart';
 import 'package:timefix/data/ical/ical_service.dart';
 import 'package:timefix/data/sync/sync_service.dart';
 import 'package:timefix/domain/models.dart';
@@ -284,17 +285,96 @@ void main() {
     final sixth = occ.firstWhere((o) => o.start == DateTime(2026, 11, 7, 9));
     await events.update(
       original: sixth,
-      edited: sixth.event.copyWith(title: 'Daily'),
+      // The editor sends the occurrence's own start and end.
+      edited: sixth.event.copyWith(title: 'Daily', start: sixth.start, end: sixth.end),
       scope: RecurrenceScope.thisAndFollowing,
     );
     occ = await occurrences(range);
     expect(occ.where((o) => o.title == 'Standup'), hasLength(5)); // 4 + moved one
-    expect(occ.where((o) => o.title == 'Daily').length, greaterThanOrEqualTo(5));
+    // The new series keeps the 5 remaining occurrences of COUNT=10.
+    expect(occ.where((o) => o.title == 'Daily'), hasLength(5));
 
     // Delete all of the first series.
     await events.delete(occ.firstWhere((o) => o.title == 'Standup' && o.event.isRecurring));
     occ = await occurrences(range);
     expect(occ.where((o) => o.title == 'Standup'), hasLength(1));
+  });
+
+  test('local series moved from Monday to Tuesday for all occurrences', () async {
+    await events.create(CalendarEvent(
+      id: 'w',
+      calendarId: 'local:default',
+      title: 'Gym',
+      start: DateTime(2026, 11, 2, 18), // Monday
+      end: DateTime(2026, 11, 2, 19),
+      rrule: 'FREQ=WEEKLY;BYDAY=MO',
+    ));
+    final range = DateRange(DateTime(2026, 11, 1), DateTime(2026, 12, 1));
+    final second = (await occurrences(range))[1];
+    await events.update(
+      original: second,
+      edited: second.event.copyWith(start: DateTime(2026, 11, 10, 18), end: DateTime(2026, 11, 10, 19)),
+    );
+    final occ = await occurrences(range);
+    expect(occ.map((o) => o.start.weekday).toSet(), {DateTime.tuesday});
+    expect(occ.first.start, DateTime(2026, 11, 3, 18));
+  });
+
+  test('one occurrence moved to a Google calendar is created there alone', () async {
+    google.calendars.add(gcal.CalendarListEntry()
+      ..id = 'primary@example.com'
+      ..summary = 'Perso'
+      ..accessRole = 'owner');
+    await sync.addGoogleAccount();
+    final googleCal = (await repo.getCalendars()).firstWhere((c) => c.remoteId == 'primary@example.com');
+    await events.create(CalendarEvent(
+      id: 'd',
+      calendarId: 'local:default',
+      title: 'Standup',
+      start: DateTime(2026, 11, 2, 9),
+      end: DateTime(2026, 11, 2, 9, 15),
+      rrule: 'FREQ=DAILY;COUNT=5',
+    ));
+    final range = DateRange(DateTime(2026, 11, 1), DateTime(2026, 11, 30));
+    final third = (await occurrences(range))[2];
+    await events.update(
+      original: third,
+      edited: third.event.copyWith(calendarId: googleCal.id, start: third.start, end: third.end),
+      scope: RecurrenceScope.thisEvent,
+    );
+    final created = google.events['primary@example.com']!.single;
+    expect(created.recurrence, isNull);
+    expect(created.start!.dateTime!.toLocal(), DateTime(2026, 11, 4, 9));
+    final occ = await occurrences(range);
+    expect(occ.where((o) => o.title == 'Standup'), hasLength(5), reason: '4 local + 1 on Google');
+  });
+
+  test('a single Google account; another signed-in account is never synced', () async {
+    google.calendars.add(gcal.CalendarListEntry()
+      ..id = 'a@example.com'
+      ..summary = 'A'
+      ..accessRole = 'owner');
+    google.email = 'a@example.com';
+    final source = await sync.addGoogleAccount();
+    await expectLater(sync.addGoogleAccount(), throwsA(isA<GoogleAccountLimitException>()));
+
+    // The app is now signed in to B (e.g. through the account picker).
+    google.email = 'b@example.com';
+    google.calendars
+      ..clear()
+      ..add(gcal.CalendarListEntry()
+        ..id = 'b@example.com'
+        ..summary = 'B'
+        ..accessRole = 'owner');
+    final report = await sync.syncAll();
+    expect(report.errors.keys, [source.id]);
+    expect((await repo.getCalendars()).where((c) => c.sourceId == source.id).map((c) => c.name), ['A']);
+    final cal = (await repo.getCalendars()).firstWhere((c) => c.name == 'A');
+    await expectLater(
+        events.create(CalendarEvent(
+            id: 'x', calendarId: cal.id, title: 'x', start: DateTime(2026, 11, 2, 9), end: DateTime(2026, 11, 2, 10))),
+        throwsA(isA<GoogleAccountMismatchException>()));
+    expect(google.events['a@example.com'], isNull);
   });
 }
 
